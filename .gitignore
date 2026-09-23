@@ -1,0 +1,6 @@
+node_modules/
+.vitepress/cache/
+.vitepress/dist/
+# Generated at build time from vpay's CHANGELOG.md at the baseline tag —
+# never hand-edited, never committed. tools/sync-release-notes.mjs.
+docs/releases/index.md

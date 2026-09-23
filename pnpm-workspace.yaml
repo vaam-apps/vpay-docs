@@ -1,0 +1,5 @@
+# pnpm 11 refuses an install with an un-allow-listed build script
+# (strictDepBuilds). esbuild's postinstall validates the platform binary
+# vitepress's bundler shells out to; nothing else here has a build script.
+allowBuilds:
+  esbuild: true

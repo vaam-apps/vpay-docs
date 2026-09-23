@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Push rails and redirect rails</title>
+  <desc id="d">Push (MTN MoMo): vpay commits the charge with its reference first, then sends requesttopay, which MTN acknowledges with 202 and no body; the payer's handset prompts for a PIN; the intent is processing; the worker's status query settles it. Redirect (Orange Money): vpay commits the charge, calls webpayment and receives a pay_token and payment URL, commits the token, and only then returns requires_action; the payer is redirected to Orange's page and enters a one-time code from USSD; the worker's status query settles it.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#334155"/>
+    </marker>
+    <style>
+      .h{font-size:15px;font-weight:700;fill:#0f172a}
+      .s{font-size:12.5px;fill:#475569}
+      .m{font-size:12px;fill:#0f172a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+      .n{font-size:13px;font-weight:800;fill:#fff}
+      .edge{stroke:#334155;stroke-width:1.8;fill:none}
+    </style>
+  </defs>
+  <rect width="1200" height="640" rx="18" fill="#fbfaf7"/>
+  <text x="32" y="44" font-size="22" font-weight="800" fill="#0f172a">Two rails, two moments the payer can act</text>
+  <text x="32" y="68" class="s">vpay selects between them on the adapter's capability value <tspan class="m">flow</tspan>, never on the rail's name.</text>
+
+  <!-- ================= PUSH ================= -->
+  <rect x="24" y="92" width="1152" height="232" rx="16" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="44" y="122" font-size="17" font-weight="800" fill="#92400e">push · MTN MoMo</text>
+  <text x="232" y="122" class="s">the payer is prompted on their own handset</text>
+
+  <g>
+    <rect x="44" y="140" width="196" height="118" rx="12" fill="#fff" stroke="#d97706"/>
+    <circle cx="64" cy="160" r="12" fill="#b45309"/><text x="64" y="165" text-anchor="middle" class="n">1</text>
+    <text x="84" y="165" class="h">Write first</text>
+    <text x="58" y="190" class="s">commit the charge as</text>
+    <text x="58" y="208" class="m">submitting</text>
+    <text x="58" y="228" class="s">with the reference vpay</text>
+    <text x="58" y="246" class="s">generated</text>
+
+    <rect x="270" y="140" width="196" height="118" rx="12" fill="#fff" stroke="#d97706"/>
+    <circle cx="290" cy="160" r="12" fill="#b45309"/><text x="290" y="165" text-anchor="middle" class="n">2</text>
+    <text x="310" y="165" class="h">Request to pay</text>
+    <text x="284" y="190" class="m">POST requesttopay</text>
+    <text x="284" y="210" class="s">MTN answers 202 with an</text>
+    <text x="284" y="228" class="s">empty body: the id is the</text>
+    <text x="284" y="246" class="m">X-Reference-Id <tspan class="s">sent</tspan></text>
+
+    <rect x="496" y="140" width="196" height="118" rx="12" fill="#fff" stroke="#d97706"/>
+    <circle cx="516" cy="160" r="12" fill="#b45309"/><text x="516" y="165" text-anchor="middle" class="n">3</text>
+    <text x="536" y="165" class="h">Handset buzzes</text>
+    <text x="510" y="190" class="s">the payer enters their PIN</text>
+    <text x="510" y="210" class="s">on their phone; nothing</text>
+    <text x="510" y="228" class="s">for a browser to do</text>
+
+    <rect x="722" y="140" width="196" height="118" rx="12" fill="#fff" stroke="#d97706"/>
+    <circle cx="742" cy="160" r="12" fill="#b45309"/><text x="742" y="165" text-anchor="middle" class="n">4</text>
+    <text x="762" y="165" class="h">Intent status</text>
+    <text x="736" y="194" font-size="15" font-weight="700" fill="#0f766e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">processing</text>
+    <text x="736" y="218" class="s">timers fire but assert</text>
+    <text x="736" y="236" class="s">nothing</text>
+
+    <rect x="948" y="140" width="208" height="118" rx="12" fill="#fff" stroke="#d97706"/>
+    <circle cx="968" cy="160" r="12" fill="#b45309"/><text x="968" y="165" text-anchor="middle" class="n">5</text>
+    <text x="988" y="165" class="h">Worker settles</text>
+    <text x="962" y="190" class="s">the authenticated status</text>
+    <text x="962" y="208" class="s">query is the only thing</text>
+    <text x="962" y="226" class="s">that moves money →</text>
+    <text x="962" y="246" class="m" fill="#166534">succeeded <tspan class="s">or</tspan> failed</text>
+
+    <path class="edge" d="M240 199 H266" marker-end="url(#a)"/>
+    <path class="edge" d="M466 199 H492" marker-end="url(#a)"/>
+    <path class="edge" d="M692 199 H718" marker-end="url(#a)"/>
+    <path class="edge" d="M918 199 H944" marker-end="url(#a)"/>
+  </g>
+  <rect x="44" y="272" width="1112" height="38" rx="10" fill="#fef3c7"/>
+  <text x="60" y="296" font-size="13.5" fill="#78350f"><tspan font-weight="800">The payer can act before vpay hears back</tspan> — so the reference is durable before the call, and a retry reuses it. A fresh one on retry would double-charge.</text>
+
+  <!-- ================= REDIRECT ================= -->
+  <rect x="24" y="344" width="1152" height="272" rx="16" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.5"/>
+  <text x="44" y="374" font-size="17" font-weight="800" fill="#115e59">redirect · Orange Money</text>
+  <text x="296" y="374" class="s">the payer is sent to the rail's own page</text>
+
+  <g>
+    <rect x="44" y="392" width="196" height="140" rx="12" fill="#fff" stroke="#0f766e"/>
+    <circle cx="64" cy="412" r="12" fill="#0f766e"/><text x="64" y="417" text-anchor="middle" class="n">1</text>
+    <text x="84" y="417" class="h">Write first</text>
+    <text x="58" y="442" class="s">commit the charge as</text>
+    <text x="58" y="460" class="m">submitting</text>
+    <text x="58" y="480" class="s">with an <tspan class="m">order_id</tspan></text>
+
+    <rect x="270" y="392" width="196" height="140" rx="12" fill="#fff" stroke="#0f766e"/>
+    <circle cx="290" cy="412" r="12" fill="#0f766e"/><text x="290" y="417" text-anchor="middle" class="n">2</text>
+    <text x="310" y="417" class="h">Ask for a page</text>
+    <text x="284" y="442" class="m">POST webpayment</text>
+    <text x="284" y="462" class="s">returns a</text>
+    <text x="284" y="480" class="m">pay_token <tspan class="s">and a</tspan></text>
+    <text x="284" y="498" class="m">payment_url</text>
+
+    <rect x="496" y="392" width="196" height="140" rx="12" fill="#fff" stroke="#0f766e"/>
+    <circle cx="516" cy="412" r="12" fill="#0f766e"/><text x="516" y="417" text-anchor="middle" class="n">3</text>
+    <text x="536" y="417" class="h">Commit, then reply</text>
+    <text x="510" y="442" class="s">the token is committed</text>
+    <text x="510" y="460" class="s">before the response;</text>
+    <text x="510" y="482" font-size="15" font-weight="700" fill="#0f766e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">requires_action</text>
+    <text x="510" y="504" class="m">next_action.</text>
+    <text x="510" y="520" class="m">redirect_to_url</text>
+
+    <rect x="722" y="392" width="196" height="140" rx="12" fill="#fff" stroke="#0f766e"/>
+    <circle cx="742" cy="412" r="12" fill="#0f766e"/><text x="742" y="417" text-anchor="middle" class="n">4</text>
+    <text x="762" y="417" class="h">Payer on Orange</text>
+    <text x="736" y="442" class="s">redirected to Orange's</text>
+    <text x="736" y="460" class="s">page; enters a one-time</text>
+    <text x="736" y="478" class="s">code obtained by USSD</text>
+
+    <rect x="948" y="392" width="208" height="140" rx="12" fill="#fff" stroke="#0f766e"/>
+    <circle cx="968" cy="412" r="12" fill="#0f766e"/><text x="968" y="417" text-anchor="middle" class="n">5</text>
+    <text x="988" y="417" class="h">Worker settles</text>
+    <text x="962" y="442" class="m">POST transactionstatus</text>
+    <text x="962" y="462" class="s">is polled until a terminal</text>
+    <text x="962" y="480" class="s">answer →</text>
+    <text x="962" y="500" class="m" fill="#166534">succeeded <tspan class="s">or</tspan> failed</text>
+
+    <path class="edge" d="M240 460 H266" marker-end="url(#a)"/>
+    <path class="edge" d="M466 460 H492" marker-end="url(#a)"/>
+    <path class="edge" d="M692 460 H718" marker-end="url(#a)"/>
+    <path class="edge" d="M918 460 H944" marker-end="url(#a)"/>
+  </g>
+  <rect x="44" y="544" width="1112" height="56" rx="10" fill="#ccfbf1"/>
+  <text x="60" y="568" font-size="13.5" fill="#134e4a"><tspan font-weight="800">The payer cannot act until vpay hands over the URL</tspan> — so the commit is the gate on the redirect. If the webpayment</text>
+  <text x="60" y="588" font-size="13.5" fill="#134e4a">response is lost, no payment can have happened: that order is abandoned and the merchant creates a new PaymentIntent.</text>
+</svg>

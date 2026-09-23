@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">vpay architecture at v0.4.1</title>
+  <desc id="d">Merchants call /v1 with OAuth2 private_key_jwt. Payers use the hosted checkout page or the merchant's own page with vpay-stripe-js, which call /v1/browser. Staff use the dashboard, whose server calls /dash/v1. One vpay-server binary runs the API and, as a second process, the worker. The API submits a charge to the rail on confirm; the worker polls the rail's authenticated status query, recovers stuck submissions and delivers signed webhooks. Rails are reached only through the provider port: MTN MoMo (push), Orange Money (redirect), or a WireMock host in configuration. Everything is stored in PostgreSQL.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#334155"/>
+    </marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#b45309"/>
+    </marker>
+    <style>
+      .h{font-size:17px;font-weight:700;fill:#0f172a}
+      .s{font-size:13px;fill:#475569}
+      .m{font-size:12.5px;fill:#0f172a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+      .l{font-size:12.5px;fill:#334155}
+      .la{font-size:12.5px;fill:#92400e;font-weight:600}
+      .edge{stroke:#334155;stroke-width:1.8;fill:none}
+      .edgea{stroke:#b45309;stroke-width:1.8;fill:none;stroke-dasharray:6 4}
+    </style>
+  </defs>
+
+  <rect width="1200" height="740" rx="18" fill="#fbfaf7"/>
+  <text x="32" y="44" font-size="22" font-weight="800" fill="#0f172a">vpay, end to end</text>
+  <text x="32" y="68" class="s">What talks to what at v0.4.1. Every rail in CI and in the demo is a WireMock host reached over HTTP.</text>
+
+  <!-- ===== actors ===== -->
+  <g>
+    <rect x="32" y="104" width="232" height="104" rx="14" fill="#fff" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="52" y="136" class="h">Merchant backend</text>
+    <text x="52" y="160" class="s">your server, using a vpay SDK</text>
+    <text x="52" y="184" class="m">Rust · Node · stripe-node</text>
+
+    <rect x="32" y="300" width="232" height="92" rx="14" fill="#fff" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="52" y="334" class="h">Payer</text>
+    <text x="52" y="358" class="s">phone (PIN) or browser (OTP)</text>
+
+    <rect x="32" y="540" width="232" height="92" rx="14" fill="#fff" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="52" y="574" class="h">Merchant staff</text>
+    <text x="52" y="598" class="s">signs in to the dashboard</text>
+  </g>
+
+  <!-- ===== front ends ===== -->
+  <g>
+    <rect x="318" y="272" width="250" height="148" rx="14" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+    <text x="338" y="304" class="h">Checkout surfaces</text>
+    <text x="338" y="330" class="l">• hosted checkout page</text>
+    <text x="352" y="348" class="s">(Next.js, served by vpay)</text>
+    <text x="338" y="374" class="l">• your own page +</text>
+    <text x="352" y="392" class="m">vpay-stripe-js</text>
+
+    <rect x="318" y="530" width="250" height="112" rx="14" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+    <text x="338" y="562" class="h">Dashboard</text>
+    <text x="338" y="586" class="s">Next.js with a server-side BFF</text>
+    <text x="338" y="608" class="s">holds no merchant API key</text>
+  </g>
+
+  <!-- ===== vpay-server ===== -->
+  <g>
+    <rect x="620" y="96" width="300" height="386" rx="18" fill="#f0fdfa" stroke="#0f766e" stroke-width="2.2"/>
+    <text x="640" y="126" font-size="18" font-weight="800" fill="#134e4a">vpay-server</text>
+    <text x="768" y="126" class="s">one binary, two modes</text>
+
+    <rect x="640" y="142" width="260" height="164" rx="12" fill="#fff" stroke="#14b8a6" stroke-width="1.5"/>
+    <text x="656" y="168" class="h">serve  <tspan class="s" font-weight="400">(the API)</tspan></text>
+    <text x="656" y="194" class="m">/v1</text>
+    <text x="656" y="216" class="m">/v1/browser</text>
+    <text x="656" y="238" class="m">/dash/v1</text>
+    <text x="656" y="260" class="m">/provider/{code}/callback</text>
+    <text x="656" y="288" class="s">writes rows · submits on confirm</text>
+
+    <rect x="640" y="322" width="260" height="140" rx="12" fill="#fff" stroke="#14b8a6" stroke-width="1.5"/>
+    <text x="656" y="348" class="h">worker  <tspan class="s" font-weight="400">(the reconciler)</tspan></text>
+    <text x="656" y="374" class="l">• polls each charge to a</text>
+    <text x="668" y="392" class="l">terminal answer</text>
+    <text x="656" y="414" class="l">• recovers stuck submissions</text>
+    <text x="656" y="436" class="l">• delivers signed webhooks</text>
+  </g>
+
+  <!-- ===== postgres ===== -->
+  <g>
+    <path d="M650 560 v88 a120 20 0 0 0 240 0 v-88" fill="#eef2ff" stroke="#4338ca" stroke-width="1.8"/>
+    <ellipse cx="770" cy="560" rx="120" ry="20" fill="#e0e7ff" stroke="#4338ca" stroke-width="1.8"/>
+    <text x="770" y="604" text-anchor="middle" class="h">PostgreSQL</text>
+    <text x="770" y="628" text-anchor="middle" class="s">intents · charges · ledger</text>
+    <text x="770" y="648" text-anchor="middle" class="s">events outbox · jobs</text>
+  </g>
+
+  <!-- ===== provider port + rails ===== -->
+  <g>
+    <rect x="968" y="96" width="200" height="386" rx="18" fill="#fffbeb" stroke="#b45309" stroke-width="1.8" stroke-dasharray="2 0"/>
+    <text x="988" y="126" font-size="16" font-weight="800" fill="#92400e">Provider port</text>
+    <text x="988" y="146" class="s">rails are adapters</text>
+
+    <rect x="986" y="162" width="164" height="78" rx="12" fill="#fff" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1002" y="190" class="h">MTN MoMo</text>
+    <text x="1002" y="212" class="s">flow: push</text>
+    <text x="1002" y="230" class="s">payer enters a PIN</text>
+
+    <rect x="986" y="256" width="164" height="78" rx="12" fill="#fff" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1002" y="284" class="h">Orange Money</text>
+    <text x="1002" y="306" class="s">flow: redirect</text>
+    <text x="1002" y="324" class="s">payer goes to Orange</text>
+
+    <rect x="986" y="350" width="164" height="112" rx="12" fill="#fff" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="1002" y="378" class="h">WireMock host</text>
+    <text x="1002" y="400" class="s">a stub rail is a URL</text>
+    <text x="1002" y="418" class="s">in configuration,</text>
+    <text x="1002" y="436" class="s">never code in the</text>
+    <text x="1002" y="454" class="s">server</text>
+  </g>
+
+  <!-- ===== evidence note ===== -->
+  <g>
+    <rect x="936" y="520" width="232" height="190" rx="14" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+    <text x="954" y="550" font-size="15" font-weight="800" fill="#991b1b">Real-rail evidence</text>
+    <text x="954" y="578" class="l">• one MTN <tspan font-weight="700">sandbox</tspan> charge,</text>
+    <text x="966" y="596" class="l">2026-09-15</text>
+    <text x="954" y="620" class="l">• Orange: never called</text>
+    <text x="954" y="644" class="l">• no refund has ever settled</text>
+    <text x="954" y="668" class="l">• no cluster has ever run it</text>
+    <text x="954" y="694" font-size="12.5" font-weight="700" fill="#991b1b">Do not deploy it.</text>
+  </g>
+
+  <!-- ===== edges ===== -->
+  <!-- merchant -> /v1 -->
+  <path class="edge" d="M264 150 H630" marker-end="url(#a)"/>
+  <text x="300" y="140" class="l"><tspan class="m">/v1</tspan> · OAuth2 client_credentials + private_key_jwt</text>
+  <!-- worker -> merchant webhooks -->
+  <path class="edge" d="M640 452 H292 V192 H272" marker-end="url(#a)"/>
+  <text x="338" y="472" class="l">signed webhooks (the worker)</text>
+  <!-- payer -> checkout -->
+  <path d="M266 346 H310" stroke="#fbfaf7" stroke-width="8"/>
+  <path class="edge" d="M264 346 H312" marker-end="url(#a)"/>
+  <!-- checkout -> /v1/browser -->
+  <path class="edge" d="M568 300 C 600 300, 600 216, 634 216" marker-end="url(#a)"/>
+  <text x="338" y="262" class="l"><tspan class="m">/v1/browser</tspan> · client_secret</text>
+  <!-- staff -> dashboard -->
+  <path class="edge" d="M264 586 H312" marker-end="url(#a)"/>
+  <!-- dashboard -> /dash/v1 -->
+  <path class="edge" d="M568 560 C 600 560, 596 238, 634 238" marker-end="url(#a)"/>
+  <text x="338" y="520" class="l"><tspan class="m">/dash/v1</tspan> · staff session</text>
+  <!-- serve/worker <-> postgres -->
+  <path class="edge" d="M770 482 V534" marker-start="url(#a)" marker-end="url(#a)"/>
+  <!-- serve -> rails : submit on confirm -->
+  <path class="edge" d="M900 190 H980" marker-end="url(#a)"/>
+  <text x="904" y="182" class="l" font-size="11.5">submit</text>
+  <!-- worker -> rails : status query -->
+  <path class="edge" d="M900 392 C 940 392, 940 300, 980 296" marker-end="url(#a)"/>
+  <!-- rail -> callback (hint) -->
+  <path class="edgea" d="M986 222 C 950 250, 930 262, 904 262" marker-end="url(#aa)"/>
+  <text x="920" y="282" class="la" font-size="11.5">hint</text>
+  <text x="906" y="416" class="l" font-size="11.5">status</text>
+  <text x="906" y="431" class="l" font-size="11.5">query</text>
+</svg>

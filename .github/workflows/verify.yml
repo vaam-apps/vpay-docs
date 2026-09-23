@@ -1,0 +1,112 @@
+name: verify
+
+# Parity and a production build, against EXACTLY what vpay.lock.json names:
+# vpay at the locked release tag, vpay-skills at the locked commit. Nothing
+# floats, so a red run here is always this repository's doing. What moves
+# upstream is release-parity.yml's job, not this one's.
+#
+# On main it also deploys the site to GitHub Pages.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: parity + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: vpay-docs
+          persist-credentials: false
+
+      - name: Read the lock
+        id: lock
+        run: |
+          echo "vpay=$(jq -r .vpay.tag vpay-docs/vpay.lock.json)" >> "$GITHUB_OUTPUT"
+          echo "skills=$(jq -r .skills.ref vpay-docs/vpay.lock.json)" >> "$GITHUB_OUTPUT"
+
+      # Full history: the skills page places each skill's verified-against
+      # commit relative to the locked tag with `git merge-base`, and the
+      # release notes are read with `git show <tag>:CHANGELOG.md`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: vaam-apps/vpay
+          ref: ${{ steps.lock.outputs.vpay }}
+          path: vpay
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: vaam-apps/vpay-skills
+          ref: ${{ steps.lock.outputs.skills }}
+          path: vpay-skills
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: vpay-docs/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: vpay-docs/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: vpay-docs
+
+      - name: verify-parity
+        working-directory: vpay-docs
+        env:
+          VPAY_REPO: ${{ github.workspace }}/vpay
+          VPAY_SKILLS_REPO: ${{ github.workspace }}/vpay-skills
+        run: node tools/verify-parity.mjs --report parity-report.md
+
+      - name: Parity report
+        if: always()
+        working-directory: vpay-docs
+        run: '[ -f parity-report.md ] && cat parity-report.md >>
+          "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: prettier
+        working-directory: vpay-docs
+        run: pnpm format:check
+
+      - name: vitepress build
+        working-directory: vpay-docs
+        env:
+          VPAY_REPO: ${{ github.workspace }}/vpay
+          VPAY_SKILLS_REPO: ${{ github.workspace }}/vpay-skills
+        run: pnpm build
+
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: vpay-docs/.vitepress/dist
+
+  deploy:
+    name: deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

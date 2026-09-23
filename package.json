@@ -1,0 +1,26 @@
+{
+  "name": "vpay-docs",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "sync": "node tools/sync-release-notes.mjs",
+    "dev": "node tools/sync-release-notes.mjs --allow-missing && vitepress dev",
+    "build": "node tools/sync-release-notes.mjs && vitepress build",
+    "preview": "vitepress preview",
+    "verify": "node tools/verify-parity.mjs",
+    "verify:release": "node tools/verify-parity.mjs --release",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "gray-matter": "4.0.3",
+    "mermaid": "12.0.0",
+    "prettier": "3.9.6",
+    "vitepress": "1.6.4",
+    "vue": "3.5.43"
+  }
+}

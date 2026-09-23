@@ -1,0 +1,182 @@
+/* Brand: a deep teal for the chrome, amber for the one thing a reader must
+   not miss (the "scaffold" banner). Status hues are fixed per meaning and used
+   nowhere else, the same rule vpay applies to its own status colours. */
+:root {
+  --vp-c-brand-1: #0f766e;
+  --vp-c-brand-2: #0d9488;
+  --vp-c-brand-3: #14b8a6;
+  --vp-c-brand-soft: rgba(20, 184, 166, 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #0f766e 20%, #f59e0b);
+  --vp-home-hero-image-background-image: linear-gradient(
+    135deg,
+    #14b8a655 40%,
+    #f59e0b55 60%
+  );
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vpay-built-fg: #166534;
+  --vpay-built-bg: #dcfce7;
+  --vpay-partial-fg: #854d0e;
+  --vpay-partial-bg: #fef3c7;
+  --vpay-unproven-fg: #1e40af;
+  --vpay-unproven-bg: #dbeafe;
+  --vpay-notbuilt-fg: #991b1b;
+  --vpay-notbuilt-bg: #fee2e2;
+}
+
+.dark {
+  --vp-c-brand-1: #2dd4bf;
+  --vp-c-brand-2: #14b8a6;
+  --vp-c-brand-3: #0d9488;
+  --vp-c-brand-soft: rgba(45, 212, 191, 0.16);
+
+  --vpay-built-fg: #86efac;
+  --vpay-built-bg: #14532d99;
+  --vpay-partial-fg: #fcd34d;
+  --vpay-partial-bg: #78350f99;
+  --vpay-unproven-fg: #93c5fd;
+  --vpay-unproven-bg: #1e3a8a99;
+  --vpay-notbuilt-fg: #fca5a5;
+  --vpay-notbuilt-bg: #7f1d1d99;
+}
+
+/* ---- status chips ------------------------------------------------------ */
+.vpay-status {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.6rem;
+  white-space: nowrap;
+}
+.vpay-status--built {
+  color: var(--vpay-built-fg);
+  background: var(--vpay-built-bg);
+}
+.vpay-status--partial {
+  color: var(--vpay-partial-fg);
+  background: var(--vpay-partial-bg);
+}
+.vpay-status--unproven {
+  color: var(--vpay-unproven-fg);
+  background: var(--vpay-unproven-bg);
+}
+.vpay-status--not-built {
+  color: var(--vpay-notbuilt-fg);
+  background: var(--vpay-notbuilt-bg);
+}
+
+.vpay-page-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.vpay-page-status__ref {
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+}
+
+/* ---- provenance box ---------------------------------------------------- */
+.vpay-provenance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px 32px;
+  margin-top: 48px;
+  padding: 16px 20px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  font-size: 0.875rem;
+}
+.vpay-provenance__title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+.vpay-provenance ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.vpay-provenance li {
+  margin: 2px 0;
+}
+.vpay-provenance__hint {
+  margin: 10px 0 0;
+  overflow-x: auto;
+  color: var(--vp-c-text-2);
+}
+.vpay-provenance code {
+  font-size: 0.8rem;
+}
+
+/* ---- diagrams ------------------------------------------------------------ */
+.mermaid-figure {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  overflow-x: auto;
+}
+.mermaid-svg {
+  display: flex;
+  justify-content: center;
+}
+.mermaid-svg svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-source {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.mermaid-error {
+  color: var(--vpay-notbuilt-fg);
+  font-size: 0.85rem;
+}
+
+/* Hand-drawn SVG illustrations carry their own light background so they read
+   the same in both themes; this frames them. */
+.vp-doc img.diagram {
+  display: block;
+  width: 100%;
+  margin: 24px auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+}
+.vp-doc figure.shot {
+  margin: 24px 0;
+}
+.vp-doc figure.shot img {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+.vp-doc figure.shot figcaption,
+.vp-doc figure figcaption {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+  text-align: center;
+}
+
+/* Screenshot galleries (real captures only — see CONTRIBUTING.md). */
+.vp-doc .shot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+.vp-doc .shot-grid figure.shot {
+  margin: 0;
+}
+.vp-doc .shot-grid img {
+  width: 100%;
+  height: auto;
+}

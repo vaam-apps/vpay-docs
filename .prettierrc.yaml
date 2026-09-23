@@ -1,0 +1,5 @@
+# proseWrap MUST stay "preserve". With "always", prettier reflows a VitePress
+# container (`::: warning Title` / body / `:::`) into a single paragraph: the
+# container never closes, and where its title ended is lost. That happened
+# once, to every container on the site, and was repaired by hand.
+proseWrap: preserve
