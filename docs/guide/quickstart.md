@@ -270,7 +270,7 @@ flowchart LR
 | testcontainers cannot find Docker (rootless)                                  | `DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock cargo nextest run --workspace`                                          |
 | `just build-dist` fails for the musl target                                   | `rustup target add x86_64-unknown-linux-musl`                                                                              |
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                        | Status                  | Evidence                                                                                                  |
 | --------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |

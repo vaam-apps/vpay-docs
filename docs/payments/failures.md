@@ -118,7 +118,7 @@ A rising `provider_error` rate means an adapter's mapping table has drifted
 behind the rail's real error strings. Alert on it; do not tolerate it. The
 runbook is [provider-error-rate](vpay:docs/runbooks/provider-error-rate.md).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                | Status                  | Evidence                                                                                                     |
 | ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------ |

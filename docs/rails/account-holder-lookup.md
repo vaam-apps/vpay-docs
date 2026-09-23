@@ -206,7 +206,7 @@ It is safe about money â€” a caller refuses on `Ok(None)` just as on an error â€
 but on a first real call, check a number known to be registered before trusting
 a `not_found`, and alert on a sustained `not_found` rate near 1.0.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                   | Status                   | Evidence                                                                         |
 | -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |

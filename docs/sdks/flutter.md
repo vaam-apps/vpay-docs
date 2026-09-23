@@ -158,7 +158,7 @@ Apple's guidelines as read on 2026-09-13; it is not legal advice. See
 - **Chrome's first-run screen can intercept the checkout** on a device where
   Chrome has not finished onboarding.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                                 | Status                   | Evidence                                                                                                                                             |
 | -------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

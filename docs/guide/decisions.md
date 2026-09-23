@@ -128,7 +128,7 @@ flowchart LR
 | [0011](vpay:docs/adr/0011-error-modelling.md): Error modelling                                  | Accepted, amended | Errors are typed at the leaves, composed per layer and classified once through `Classify`. `anyhow` appears only at a binary's edge                                    |
 | [0016](vpay:docs/adr/0016-engineering-standards.md): Six engineering standards                  | Accepted          | The six standards are errors, adapters, serde `snake_case`, SOLID/DRY, repositories as traits, and compiled doctests with externalised docs. Three are machine-checked |
 
-## Status in v0.4.1
+## Status in this release
 
 Most ADRs describe decisions that are in force. The ones below are where the
 decision and the code do not match yet, and the ADR says so itself:

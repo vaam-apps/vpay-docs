@@ -180,7 +180,7 @@ so a job with no stack never picks it up; CI runs it in the `e2e (compose)` job.
 - **Reading `stripe-should-retry: true`.** The suite observes only the `false`
   direction; the `true` direction cannot be staged without a test double.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                  | Status                  | Evidence                                                                                                                                  |
 | ----------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |

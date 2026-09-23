@@ -215,7 +215,7 @@ each. Two rules from it are worth knowing before an incident:
   against the rail's statement
   ([unresolved-charges runbook](vpay:docs/runbooks/unresolved-charges.md)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                   | Evidence                                                                                        |
 | ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------- |

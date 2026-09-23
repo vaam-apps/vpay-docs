@@ -268,7 +268,7 @@ reconciler", the port leaked.
   `provider_error`, because it tells a merchant something false about whether to
   retry.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                             | Status                   | Evidence                                                                                                                          |
 | ------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |

@@ -267,7 +267,7 @@ right bytes" and "the SDK works against vpay".
   `examples/checkout-browser/mint.mjs` through this SDK
   ([live sandbox test](/operate/runbooks#live-sandbox-test)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                                 | Status                   | Evidence                                                                    |
 | -------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |

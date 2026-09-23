@@ -196,7 +196,7 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 ([ADR-0002](vpay:docs/adr/0002-provider-port.md),
 [Provider port](/rails/provider-port)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                  | Status                   | Evidence                                                                                       |
 | ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |

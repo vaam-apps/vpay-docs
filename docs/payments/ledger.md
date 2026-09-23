@@ -147,7 +147,7 @@ back. It is **reported to the merchant and posted nowhere**, by decision: who
 bears it is a marketplace judgement, not something a rail's response contains.
 And no rail reports a refund fee to vpay today, so the column is never written.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                   | Evidence                                                                                         |
 | ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |

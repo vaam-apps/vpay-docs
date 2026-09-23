@@ -140,7 +140,7 @@ refund that **nothing settles** — there is no refund poll ladder. That is a ga
 in vpay, not a parity gap.
 :::
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                        | Status                  | Evidence                                                                                                                                 |
 | ------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |

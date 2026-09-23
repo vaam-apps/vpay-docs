@@ -200,7 +200,7 @@ on 2026-09-13, not legal advice — the
   hand-edited to redact the session URL; `dart run pigeon` silently reverts
   them, and only the Dart copy has a test that notices.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                             | Status                   | Evidence                                                                                                                                                |
 | ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |

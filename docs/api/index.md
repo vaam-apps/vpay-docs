@@ -237,7 +237,7 @@ It answers the honest `404` from the nest's fallback, to an authenticated
 caller, because there is no ledger read path — a `200` would mean somebody
 invented a resource. Both SDKs can call it and get that `404`.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                        | Status                   | Evidence                                                                                        |
 | ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------- |

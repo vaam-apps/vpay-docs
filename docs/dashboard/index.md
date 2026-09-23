@@ -171,7 +171,7 @@ gateway at all is an open maintainer decision. See
 [Deployment](/operate/deployment).
 :::
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                      | Status                   | Evidence                                                                                            |
 | --------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |

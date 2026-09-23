@@ -308,7 +308,7 @@ _Evidence:_ the one page whose commands have run against a real rail, on
 [docs/runbooks/live-sandbox-test.md](vpay:docs/runbooks/live-sandbox-test.md) ·
 background: [MTN MoMo](/rails/mtn-momo)
 
-## Status in v0.4.1
+## Status in this release
 
 | Runbook group                                       | Status                  | Evidence                                                                             |
 | --------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |

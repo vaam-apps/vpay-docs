@@ -149,7 +149,7 @@ prevent.
 | A handler hand-builds an envelope                  | the renderers are `pub(crate)` with one production caller                                      |
 | Two boundaries disagree on retry                   | impossible by construction — both read `Classify::retry`                                       |
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                     | Status                 | Evidence                                                                                                       |
 | ---------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------- |

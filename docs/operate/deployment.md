@@ -247,7 +247,7 @@ helm upgrade --install vpay oci://ghcr.io/vaam-apps/charts/vpay --version "$VERS
 - **Every rail callback 404s if `/provider` is not routed.** The chart now
   routes it by default and a guard refuses to turn it off silently.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                             | Status                   | Evidence                                                                                    |
 | ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------- |

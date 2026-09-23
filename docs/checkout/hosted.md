@@ -12,6 +12,7 @@ sources:
   - docs/flows/hosted-checkout/not-built-and-not-proven.md
   - docs/runbooks/checkout.md
   - frontends/apps/checkout/src/lib/machine.ts
+  - frontends/apps/checkout/src/components
 skills:
   - vpay-checkout
   - vpay-frontend
@@ -374,7 +375,7 @@ merchant's `publishable_keys`, `display_name` and (for embedded)
 | "This page will not load here"                        | The framing origin is not in that merchant's `checkout_origins`                           |
 | The order never turns paid though vpay says succeeded | The merchant's webhook endpoint — verify the **raw** bytes and the secret                 |
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                         | Status                   | Evidence                                                                                                              |
 | -------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |

@@ -203,7 +203,7 @@ A late success, at minute 40 or at hour 30, is normal. The intent stayed
 `processing` the whole time, so it moves to `succeeded` and emits a plain
 `payment_intent.succeeded`. Full page: [Reconciler](/payments/reconciler).
 
-## Status in v0.4.1
+## Status in this release
 
 | Concept                        | Status                  | Evidence                                                                                                                         |
 | ------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |

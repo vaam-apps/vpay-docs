@@ -218,7 +218,7 @@ rail: MTN can produce all eleven, Orange only three. See
   and a human is alerted; the intent stays where it is and polling continues
   hourly. See [the reconciler](/payments/reconciler).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                              | Status                   | Evidence                                                                                            |
 | ----------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |

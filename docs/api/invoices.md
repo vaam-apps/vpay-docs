@@ -197,7 +197,7 @@ existence.
   an invoice to a paid charge.
 - Amounts above `2^53 - 1` minor units cannot be finalized.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                     | Status                   | Evidence                                                                   |
 | ---------------------------------------- | ------------------------ | -------------------------------------------------------------------------- |

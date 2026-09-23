@@ -273,7 +273,7 @@ opens a real popup.
   proves only that a browser was pointed there. Poll, and fulfil from the
   [webhook](/api/webhooks).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                               | Status                   | Evidence                                                                                              |
 | -------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |

@@ -159,7 +159,7 @@ The column, the wire field and both SDKs' `Refund.fee` exist, but it stays
 `null`. No rail response that carries a fee has ever been seen, and an adapter
 must never invent one.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                          | Status                   | Evidence                                                                     |
 | ----------------------------- | ------------------------ | ---------------------------------------------------------------------------- |

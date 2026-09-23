@@ -204,7 +204,7 @@ exit `78`. Nobody has rotated one on a deployment — see
 - **The signing-key PEM is not zeroized** in memory.
   :::
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                        | Status                   | Evidence                                                                                                              |
 | ------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
