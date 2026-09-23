@@ -242,7 +242,7 @@ stateDiagram-v2
 
 ### The screens, as vpay renders them
 
-These are screenshots of vpay's own checkout components at v0.4.1, taken from
+These are screenshots of vpay's own checkout components, captured at v0.4.1 from
 the checkout app's Storybook (`frontends/apps/checkout`, story file
 `checkout-screens.stories.tsx`). The data is the repository's test fixture: a 5
 000 FCFA session for "Boutique Test", with reference
@@ -288,8 +288,10 @@ screens are shown in English.
 
 ::: info What these screenshots are, and what they are not
 They are vpay's real components, rendered with fixture state. They are **not** a
-capture of a live payment. No rail answered behind them, and at v0.4.1 no real
-payer has seen any of these screens.
+capture of a live payment. No rail answered behind them, and at <Release /> no
+real payer has seen any of these screens. The checkout components are among
+this page's sources, so a release that changes them marks the page stale and
+the screenshots due for a retake.
 :::
 
 A few properties worth knowing:

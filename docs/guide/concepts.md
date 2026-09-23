@@ -65,8 +65,8 @@ stateDiagram-v2
     requires_payment_method --> canceled : cancel
     requires_payment_method --> processing : confirm on a push rail
     requires_payment_method --> requires_action : confirm on a redirect rail
-    requires_action --> processing : payer redirected, token durable
-    requires_action --> failed : submit response lost, payer never redirected
+    requires_action --> succeeded : rail says succeeded
+    requires_action --> failed : rail says failed
     processing --> succeeded : rail says succeeded
     processing --> failed : rail says failed
     state "requires_payment_method + last_payment_error" as failed
@@ -75,10 +75,11 @@ stateDiagram-v2
     failed --> [*]
 ```
 
-`confirm` always submits. `requires_action` happens only on redirect rails.
-`processing` ends only when the rail gives a terminal answer: timers fire, but
-they never decide the outcome. `canceled` is reachable only before a rail has
-the request. Full page: [Payment lifecycle](/payments/lifecycle).
+`confirm` always submits. `requires_action` happens only on redirect rails, and
+a redirect intent settles or fails straight from it, without passing through
+`processing`. Neither state ends until the rail gives a terminal answer: timers
+fire, but they never decide the outcome. `canceled` is reachable only before a
+rail has the request. Full page: [Payment lifecycle](/payments/lifecycle).
 
 ## Money is integer minor units
 

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="t d">
-  <title id="t">vpay architecture at v0.4.1</title>
+  <title id="t">vpay architecture</title>
   <desc id="d">Merchants call /v1 with OAuth2 private_key_jwt. Payers use the hosted checkout page or the merchant's own page with vpay-stripe-js, which call /v1/browser. Staff use the dashboard, whose server calls /dash/v1. One vpay-server binary runs the API and, as a second process, the worker. The API submits a charge to the rail on confirm; the worker polls the rail's authenticated status query, recovers stuck submissions and delivers signed webhooks. Rails are reached only through the provider port: MTN MoMo (push), Orange Money (redirect), or a WireMock host in configuration. Everything is stored in PostgreSQL.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -21,7 +21,7 @@
 
   <rect width="1200" height="740" rx="18" fill="#fbfaf7"/>
   <text x="32" y="44" font-size="22" font-weight="800" fill="#0f172a">vpay, end to end</text>
-  <text x="32" y="68" class="s">What talks to what at v0.4.1. Every rail in CI and in the demo is a WireMock host reached over HTTP.</text>
+  <text x="32" y="68" class="s">What talks to what. Every rail in CI and in the demo is a WireMock host reached over HTTP.</text>
 
   <!-- ===== actors ===== -->
   <g>

@@ -208,15 +208,15 @@ a `not_found`, and alert on a sustained `not_found` rate near 1.0.
 
 ## Status in this release
 
-| Part                                   | Status                   | Evidence                                                                         |
-| -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| `GET /v1/account_holders` route        | <Status s="unproven" />  | Served; six integration cases over a socket against a WireMock MTN               |
-| MTN `account_holder_name`              | <Status s="unproven" />  | Five conformance cases against WireMock; never called against MTN's real sandbox |
-| Name-only projection, masked logs      | <Status s="built" />     | Asserted against captured `tracing` output                                       |
-| Refund path as a second caller         | <Status s="unproven" />  | Counted and logged through the same function; WireMock only                      |
-| Orange lookup                          | <Status s="not-built" /> | `false`; Orange's route unconfirmed                                              |
-| Rate limit, audit log, dedicated scope | <Status s="not-built" /> | Reserved decisions for the maintainer                                            |
-| SDK `retrieve` methods                 | <Status s="unproven" />  | Tested against HTTP stubs only, never against a running vpay                     |
+| Part                                   | Status                   | Evidence                                                                                                                                                         |
+| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/account_holders` route        | <Status s="unproven" />  | Served; six integration cases over a socket against a WireMock MTN                                                                                               |
+| MTN `account_holder_name`              | <Status s="unproven" />  | Five conformance cases against WireMock; never called against MTN's real sandbox — the 2026-09-15 sandbox run charged a payment and did not call `basicuserinfo` |
+| Name-only projection, masked logs      | <Status s="built" />     | Asserted against captured `tracing` output                                                                                                                       |
+| Refund path as a second caller         | <Status s="unproven" />  | Counted and logged through the same function; WireMock only                                                                                                      |
+| Orange lookup                          | <Status s="not-built" /> | `false`; Orange's route unconfirmed                                                                                                                              |
+| Rate limit, audit log, dedicated scope | <Status s="not-built" /> | Reserved decisions for the maintainer                                                                                                                            |
+| SDK `retrieve` methods                 | <Status s="unproven" />  | Tested against HTTP stubs only, never against a running vpay                                                                                                     |
 
 The full record, with every test named, is in vpay's
 [account-holder lookup flow § Status](vpay:docs/flows/account-holder-lookup.md#status).

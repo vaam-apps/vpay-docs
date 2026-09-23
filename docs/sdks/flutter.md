@@ -186,4 +186,6 @@ from the next day. The full record is the Flutter table of
 - [ADR-0021: a Flutter checkout plugin](vpay:docs/adr/0021-flutter-checkout-plugin.md)
 - [docs/flows/mobile-checkout.md](vpay:docs/flows/mobile-checkout.md)
 - [Mobile checkout](/checkout/mobile) and [Hosted checkout](/checkout/hosted)
+- [Tauri checkout](/checkout/tauri) — the same payer surface for Tauri v2 apps,
+  with its own table in the parity matrix
 - Skills: [vpay-sdks](skill:vpay-sdks), [vpay-checkout](skill:vpay-checkout)

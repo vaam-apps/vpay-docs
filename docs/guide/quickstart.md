@@ -256,6 +256,13 @@ flowchart LR
     CI -.->|"does not cover"| E
 ```
 
+The Tauri checkout plugin (`sdks/tauri/tauri-plugin-vpay-checkout`) is its own
+Cargo workspace, so `just ci` never compiles its Rust half. Its TypeScript half
+is reached by `pnpm -r` and is gated. For the rest, run
+`just test-tauri-rust`, `just clippy-tauri-rust` and `just check-tauri-mobile`
+by hand: none of them is in `just ci` or `just verify`. See
+[Tauri checkout](/checkout/tauri).
+
 ## What can go wrong
 
 | Symptom                                                                       | Cause and fix                                                                                                              |

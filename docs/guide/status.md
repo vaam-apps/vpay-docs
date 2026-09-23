@@ -1,15 +1,18 @@
 ---
 title: What works today
 description:
-  An honest account of what vpay v0.4.1 can and cannot do, area by area, with
-  the MVP conditions and the one declared unimplemented path.
+  An honest account of what the vpay release these pages describe can and
+  cannot do, area by area, with the MVP conditions and the one declared
+  unimplemented path.
 status: partial
 sources:
+  - README.md
   - docs/status.md
   - docs/status/mvp.md
   - docs/status/backend.md
   - docs/status/frontend.md
   - docs/status/infrastructure.md
+  - docs/status/mobile-tauri-plugin.md
 skills:
   - vpay-docs-status
   - vpay
@@ -17,7 +20,7 @@ skills:
 
 # What works today
 
-This page tells you what vpay v0.4.1 actually does. Most of the other pages on
+This page tells you what vpay <Release /> actually does. Most of the other pages on
 this site describe how vpay is _designed_ to work. They mark what is built, but
 this page is the honest summary. The source of truth is vpay's own
 [`docs/status.md`](vpay:docs/status.md), and a build gate reads that file, so it
@@ -74,17 +77,18 @@ the rest is listed on the linked page. On vpay's side, every 🟡 and ⛔ is the
 because a test says so, and nothing is marked ✅ unless a test would fail if it
 broke.
 
-| Area                                                       | Status                  | Today                                                                                                                                                  | Detail                                                                                                   |
-| ---------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| **Backend**: `/v1`, `/dash/v1`, `/provider`, `/v1/browser` | <Status s="partial" />  | Real routes, real rows and real adapters. Every rail call went to a stub until 2026-09-15, when the MTN push first reached MTN's real sandbox          | [status/backend.md](vpay:docs/status/backend.md)                                                         |
-| **Adapter**: `mtn_momo` charge                             | <Status s="partial" />  | Wire calls proven against WireMock. Since 2026-09-15 the charge path is also proven against MTN's real sandbox                                         | [status/backend.md](vpay:docs/status/backend.md)                                                         |
-| **Adapter**: `mtn_momo` refund                             | <Status s="unproven" /> | The Disbursements `transfer` call is written and WireMock-proven. It has never been called, and no real Disbursements credential exists in the project | [status.md](vpay:docs/status.md)                                                                         |
-| **Adapter**: `orange_money`                                | <Status s="unproven" /> | Wire calls proven against WireMock. Never called                                                                                                       | [status/backend.md](vpay:docs/status/backend.md)                                                         |
-| **Frontend**: checkout page, dashboard, demo shop          | <Status s="partial" />  | Built, and walked by a real browser against a stub rail                                                                                                | [status/frontend.md](vpay:docs/status/frontend.md)                                                       |
-| **Infrastructure**: images, compose, Helm, migrations      | <Status s="partial" />  | Boots in compose and in CI. **No pod has ever run**                                                                                                    | [status/infrastructure.md](vpay:docs/status/infrastructure.md)                                           |
-| **Data layer**: sqlx, CrateStack, the schema               | <Status s="partial" />  | `schemas/vpay.cstack` compiles into `vpay-db`. The drift between migrations and models is counted but not closed                                       | [status/cratestack.md](vpay:docs/status/cratestack.md)                                                   |
-| **Merchant SDKs**: `sdks/rust`, `sdks/nodejs`              | <Status s="partial" />  | Parity is machine-checked in both directions. The gaps are dated and each has an owner                                                                 | [status/merchant-sdks.md](vpay:docs/status/merchant-sdks.md), [sdks/parity.md](vpay:docs/sdks/parity.md) |
-| **An MVP**                                                 | <Status s="partial" />  | Two of eight conditions met (see below). It is not an MVP                                                                                              | [status/mvp.md](vpay:docs/status/mvp.md)                                                                 |
+| Area                                                       | Status                  | Today                                                                                                                                                                                                                                                                                                                             | Detail                                                                                                                                                 |
+| ---------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Backend**: `/v1`, `/dash/v1`, `/provider`, `/v1/browser` | <Status s="partial" />  | Real routes, real rows and real adapters. Every rail call went to a stub until 2026-09-15, when the MTN push first reached MTN's real sandbox                                                                                                                                                                                     | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
+| **Adapter**: `mtn_momo` charge                             | <Status s="partial" />  | Wire calls proven against WireMock. Since 2026-09-15 the charge path is also proven against MTN's real sandbox                                                                                                                                                                                                                    | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
+| **Adapter**: `mtn_momo` refund                             | <Status s="unproven" /> | The Disbursements `transfer` call is written and WireMock-proven. It has never been called, and no real Disbursements credential exists in the project                                                                                                                                                                            | [status.md](vpay:docs/status.md)                                                                                                                       |
+| **Adapter**: `orange_money`                                | <Status s="unproven" /> | Wire calls proven against WireMock. Never called                                                                                                                                                                                                                                                                                  | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
+| **Frontend**: checkout page, dashboard, demo shop          | <Status s="partial" />  | Built, and walked by a real browser against a stub rail                                                                                                                                                                                                                                                                           | [status/frontend.md](vpay:docs/status/frontend.md)                                                                                                     |
+| **Infrastructure**: images, compose, Helm, migrations      | <Status s="partial" />  | Boots in compose and in CI. **No pod has ever run**                                                                                                                                                                                                                                                                               | [status/infrastructure.md](vpay:docs/status/infrastructure.md)                                                                                         |
+| **Data layer**: sqlx, CrateStack, the schema               | <Status s="partial" />  | `schemas/vpay.cstack` compiles into `vpay-db`. The drift between migrations and models is counted but not closed                                                                                                                                                                                                                  | [status/cratestack.md](vpay:docs/status/cratestack.md)                                                                                                 |
+| **Merchant SDKs**: `sdks/rust`, `sdks/nodejs`              | <Status s="partial" />  | Parity is machine-checked in both directions. The gaps are dated and each has an owner                                                                                                                                                                                                                                            | [status/merchant-sdks.md](vpay:docs/status/merchant-sdks.md), [sdks/parity.md](vpay:docs/sdks/parity.md)                                               |
+| **Payer-device plugins**: `sdks/flutter`, `sdks/tauri`     | <Status s="partial" />  | Not merchant SDKs. `just ci` builds and tests neither, apart from the Tauri plugin's TypeScript half. The Tauri plugin (2026-09-22) has driven two checkouts to `succeeded` on an Android emulator and an iOS simulator, against a running vpay whose rail was WireMock. No physical device, and desktop has never run a checkout | [status/mobile-flutter-plugin.md](vpay:docs/status/mobile-flutter-plugin.md), [status/mobile-tauri-plugin.md](vpay:docs/status/mobile-tauri-plugin.md) |
+| **An MVP**                                                 | <Status s="partial" />  | Two of eight conditions met (see below). It is not an MVP                                                                                                                                                                                                                                                                         | [status/mvp.md](vpay:docs/status/mvp.md)                                                                                                               |
 
 ### What "partial" means in practice
 
@@ -113,7 +117,7 @@ MVP. Two are met.
 
 ```mermaid
 pie showData
-    title MVP conditions at v0.4.1
+    title MVP conditions
     "Met" : 2
     "Not met" : 6
 ```
@@ -142,7 +146,7 @@ vpay's second rule is that code which has not been written returns
 fails the build, and so does a declared token that no shipping code still
 carries.
 
-At v0.4.1 **exactly one** token is declared:
+At <Release /> **exactly one** token is declared:
 
 | Token                  | What it means                                                                                                                                                                                                                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

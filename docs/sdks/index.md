@@ -2,14 +2,15 @@
 title: SDKs
 description:
   The vpay SDK family — two merchant SDKs held to machine-checked parity, a
-  browser client, a Flutter payer plugin, and a conformance suite that drives
-  the official Stripe package — and which one to reach for.
+  browser client, Flutter and Tauri payer plugins, and a conformance suite that
+  drives the official Stripe package — and which one to reach for.
 status: partial
 sources:
   - docs/sdks/README.md
   - docs/sdks/parity.md
   - docs/adr/0015-sdk-parity.md
   - docs/flows/merchant-auth.md
+  - docs/flows/tauri-checkout.md
   - docs/runbooks/live-sandbox-test.md
   - examples/checkout-browser
 skills:
@@ -29,18 +30,26 @@ Agents working on any SDK should load [vpay-sdks](skill:vpay-sdks).
 
 ## The family
 
-| Package                         | Directory                            | Runs on                        | Talks to                       | Page                                               |
-| ------------------------------- | ------------------------------------ | ------------------------------ | ------------------------------ | -------------------------------------------------- |
-| `@vaam-apps/vpay-sdk`           | `sdks/nodejs`                        | merchant server (Node ≥ 22.11) | `/v1`                          | [Node.js](/sdks/nodejs)                            |
-| `vpay-sdk`                      | `sdks/rust`                          | merchant server (tokio)        | `/v1`                          | [Rust](/sdks/rust)                                 |
-| `@vaam-apps/vpay-stripe-js`     | `sdks/stripe-js`                     | payer's browser                | `/v1/browser`                  | [Stripe compatibility](/sdks/stripe)               |
-| `vpay_checkout_flutter`         | `sdks/flutter/vpay_checkout_flutter` | payer's Flutter app            | `/v1/browser`, the hosted page | [Flutter](/sdks/flutter)                           |
-| `@vaam-apps/vpay-stripe-compat` | `sdks/stripe-compat`                 | CI only — **not an SDK**       | a live compose stack           | [Stripe compatibility](/sdks/stripe#stripe-compat) |
+| Package                                                         | Directory                               | Runs on                                                          | Talks to                       | Page                                               |
+| --------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------- | ------------------------------ | -------------------------------------------------- |
+| `@vaam-apps/vpay-sdk`                                           | `sdks/nodejs`                           | merchant server (Node ≥ 22.11)                                   | `/v1`                          | [Node.js](/sdks/nodejs)                            |
+| `vpay-sdk`                                                      | `sdks/rust`                             | merchant server (tokio)                                          | `/v1`                          | [Rust](/sdks/rust)                                 |
+| `@vaam-apps/vpay-stripe-js`                                     | `sdks/stripe-js`                        | payer's browser                                                  | `/v1/browser`                  | [Stripe compatibility](/sdks/stripe)               |
+| `vpay_checkout_flutter`                                         | `sdks/flutter/vpay_checkout_flutter`    | payer's Flutter app                                              | `/v1/browser`, the hosted page | [Flutter](/sdks/flutter)                           |
+| `@vaam-apps/vpay-tauri-checkout` + `tauri-plugin-vpay-checkout` | `sdks/tauri/tauri-plugin-vpay-checkout` | payer's Tauri v2 app (Android, iOS, desktop), or a plain browser | `/v1/browser`, the hosted page | [Tauri checkout](/checkout/tauri)                  |
+| `@vaam-apps/vpay-stripe-compat`                                 | `sdks/stripe-compat`                    | CI only — **not an SDK**                                         | a live compose stack           | [Stripe compatibility](/sdks/stripe#stripe-compat) |
 
 `sdks/stripe-compat` ships nothing. It is evidence: the official `stripe` Node
 package, driven through the Node SDK's authenticator against a real
 `vpay-server`, to prove that a Stripe-shaped integration works. It gets no row
 in the parity matrix, because it proves claims rather than making its own.
+
+The Tauri plugin is the newest payer surface: a Rust crate and a guest-JS
+package that open vpay's hosted page in the payer's own browser from a Tauri v2
+app, with a `window.open` popup when the same code runs outside Tauri. Neither
+half is on a registry — the npm install line in its README is written down for
+the day it is published and 404s today — so it is consumed from a checkout of
+the vpay repository.
 
 ## Which one do I need?
 
@@ -50,12 +59,14 @@ flowchart TD
   Q -->|"merchant server"| M{"Language, and existing code?"}
   Q -->|"payer's browser"| SJ["@vaam-apps/vpay-stripe-js"]
   Q -->|"payer's Flutter app"| FL["vpay_checkout_flutter"]
+  Q -->|"payer's Tauri v2 app"| TA["@vaam-apps/vpay-tauri-checkout"]
   M -->|"Node, new integration"| N["@vaam-apps/vpay-sdk VpayClient"]
   M -->|"Node, existing Stripe code"| SN["official stripe package + createStripeAuthenticator"]
   M -->|"Rust"| R["vpay-sdk crate"]
   M -.->|"Rust, existing async-stripe code"| AS["no authenticator — dated gap"]
   SJ --> CS["needs a client_secret your server minted"]
   FL --> CS
+  TA --> CS
   N --> V1["/v1 via private_key_jwt"]
   SN --> V1
   R --> V1
@@ -107,7 +118,7 @@ the named test. It means a case exists that would fail if the capability broke.
 ## The matrix, summarised
 
 Counts are not given here on purpose — read the matrix itself. This is the shape
-of it at v0.4.1:
+of it at <Release />:
 
 | Area                                                                                                                                     | `sdks/rust`                                                               | `sdks/nodejs`                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -130,7 +141,8 @@ has done is evidence about a real rail, with one exception: the single MTN
 `examples/checkout-browser/mint.mjs` through the Node SDK and confirmed in the
 browser through `vpay-stripe-js`
 ([live sandbox test](/operate/runbooks#live-sandbox-test)). The matrix also has
-its own tables for the browser client and the Flutter plugin; see their pages.
+its own tables for the browser client, the Flutter plugin and the Tauri plugin;
+see their pages.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:
@@ -142,12 +154,13 @@ in vpay, not a parity gap.
 
 ## Status in this release
 
-| Part                                        | Status                  | Evidence                                                                                                                                 |
-| ------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                         |
-| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                            |
-| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                 |
-| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Once: the 2026-09-15 MTN sandbox payment was minted with the Node SDK and confirmed with `vpay-stripe-js` — no other rail, no production |
+| Part                                        | Status                  | Evidence                                                                                                                                                        |
+| ------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                |
+| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                   |
+| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                        |
+| Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate |
+| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Once: the 2026-09-15 MTN sandbox payment was minted with the Node SDK and confirmed with `vpay-stripe-js` — no other rail, no production                        |
 
 See [docs/status.md](vpay:docs/status.md) for the repository-wide picture and
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md#gap-ledger) for every open gap.

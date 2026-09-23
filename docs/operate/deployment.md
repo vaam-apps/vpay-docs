@@ -13,6 +13,7 @@ sources:
   - docs/adr/0013-database-backups-and-retention.md
   - deploy/helm/vpay/README.md
   - docs/runbooks/release.md
+  - .github/workflows/notify-docs.yml
   - docs/runbooks/migrations.md
   - docs/status/gates.md
 skills:
@@ -204,6 +205,7 @@ flowchart TD
   MG --> PC["publish-chart, tags only"]
   PC --> OCI["oci://ghcr.io/vaam-apps/charts/vpay"]
   T --> NPM["publish-node-sdk, publish-stripe-js-sdk"]
+  T -.->|"separate workflow, cannot block"| ND["notify-docs.yml: repository_dispatch to vpay-docs"]
 ```
 
 There is deliberately no `latest` tag and no `edge` chart: a real deployment
@@ -219,6 +221,14 @@ signed images, and published and signed a chart. What has **not**: nobody has
 run `cosign verify` against anything this repository produced, nobody has pulled
 an image, and GHCR package visibility is unmeasured. The
 [release runbook](/operate/runbooks#release) is the procedure.
+
+A `v*` tag also triggers
+[`notify-docs.yml`](vpay:.github/workflows/notify-docs.yml), a separate workflow
+that tells this documentation site a release landed (a `repository_dispatch` of
+type `vpay-release` to vaam-apps/vpay-docs). It has no `needs:` and no shared
+concurrency with `release.yml`, so it cannot hold up or fail a release, and a
+release that leaves these docs stale still ships. The release runbook, as of
+<Release />, records it as not yet proven on a real tag.
 
 Installing from the registry takes the shape the chart README gives:
 

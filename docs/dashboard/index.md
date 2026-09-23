@@ -3,7 +3,7 @@ title: The staff dashboard
 description:
   What the merchant dashboard is, how its read path works from browser to
   /dash/v1, what a screen is allowed to show, and how much of it exists in
-  v0.4.1.
+  this release.
 status: partial
 sources:
   - docs/flows/dashboard.md
@@ -14,6 +14,7 @@ sources:
   - docs/adr/0008-dashboard-scope.md
   - docs/adr/0022-surface-isolation-and-independent-scaling.md
   - frontends/apps/dashboard
+  - docs/flows/webhooks.md
 skills:
   - vpay-dashboard
   - vpay-frontend
@@ -24,7 +25,7 @@ skills:
 The dashboard is a Next.js app a merchant's staff sign in to, to see what
 happened to that merchant's payments. Its founding decision is that it
 **observes and does not administer**: it reads records, it never changes
-configuration, and it never holds a merchant API key. In v0.4.1 it is
+configuration, and it never holds a merchant API key. In <Release /> it is
 **read-only** — a staff member can sign in and read payments, refunds, webhook
 deliveries, customers and checkout sessions, and cannot do anything at all to
 any of them. It has never run in a deployment.
@@ -92,8 +93,11 @@ flowchart LR
   a request the dashboard did not issue is refused by an `Origin` /
   `Sec-Fetch-Site` check; the bearer token appears in no response header or
   body; no caller-supplied merchant id, audience or scope is forwarded. Every
-  other method gets a `405`. It was attacked in a security review and driven
-  from a real browser; the payments pages still issue no read through it.
+  other method gets a `405`. It has six handlers — one per list plus the
+  payment detail — and Refine's data provider is wired to it, but every page's
+  first render is read on the server as above, so the BFF carries at most the
+  re-reads Refine makes afterwards in the browser. It was attacked in a
+  security review and driven from a real browser.
 - **The payments list** is served by two REST routes and is cursor-paged, like
   the merchant API. **The other four lists** are CrateStack procedures under
   `/dash/v1/$procs/`, which the dashboard's server calls with `POST` on the
@@ -134,11 +138,14 @@ the screens are held to rules about **absence**:
   only when `has_more` says so.
 - **An unknown status renders as text**, not as a coloured pill. A green badge
   on an unfamiliar status is a claim.
-- **The timeline names what it cannot show.** Under it, the page lists the five
-  documented event types that nothing writes (`payment_intent.created`,
-  `payment_intent.processing`, `payment_intent.canceled`, `charge.refunded`,
-  `charge.refund.updated`), so a one-line timeline is not read as the whole
-  history.
+- **The timeline names what it cannot show.** Under it, a banner says the
+  timeline is not the whole history of a payment and names the event types
+  nothing writes. The banner is itself out of date: it still names five
+  (`payment_intent.created`, `payment_intent.processing`,
+  `payment_intent.canceled`, `charge.refunded`, `charge.refund.updated`), but
+  the last three have had writers since 2026-09-10 and 2026-09-16. Only
+  `payment_intent.created` and `payment_intent.processing` are still written by
+  nothing — see [Webhooks](/api/webhooks).
 - **The merchant is on every page**, beside the staff member's address, so an
   empty list is distinguishable from looking at the wrong merchant.
 - **Payer credentials never appear.** The checkout list's source type does not
@@ -178,7 +185,7 @@ gateway at all is an open maintainer decision. See
 | `/dash/v1` boundary, the two payment reads, boot refusals | <Status s="built" />     | `backends/tests/integration/tests/dashboard_read_surface.rs` over a booted server and real Postgres |
 | Sign-in and the pages, in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` signs in through the real OP against the compose stack and reads payments         |
 | Refunds, deliveries, customers, checkouts lists           | <Status s="partial" />   | Read-only lists over CrateStack procedures; no filters                                              |
-| The BFF read surface                                      | <Status s="partial" />   | Reviewed and browser-tested; no page reads through it                                               |
+| The BFF read surface                                      | <Status s="partial" />   | Six handlers, reviewed and browser-tested; pages render from server-side reads, not through it      |
 | Writes and `audit_log`                                    | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                    |
 | Slices 4–6                                                | <Status s="not-built" /> | Not started                                                                                         |
 | Real data on screen                                       | <Status s="partial" />   | Every payment it has shown settled against a WireMock rail                                          |
