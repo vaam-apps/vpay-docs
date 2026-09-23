@@ -1,19 +1,37 @@
 name: release-parity
 
-# Each time vpay tags a release, ask: are these pages still true of it?
+# Each time vpay tags a release, ask: are these pages still true of it? When
+# they are not, open ONE draft pull request for that release, on a branch
+# named `parity/vpay-<tag>`, that does the mechanical half of the work:
 #
-# vpay's own release is never blocked by the answer. Its images, chart and
-# SDKs publish from vpay's release.yml whatever happens here. What this
-# workflow does when the answer is "no" is REPORT: the job goes red, the step
-# summary carries the parity report, and one issue per release lists every
-# page whose vpay sources changed and every vpay page that has no page here.
-# A person closes that gap and bumps vpay.lock.json. The lock is never bumped
-# automatically, because "the files still exist" is not "the pages are true".
+#   - tools/bump-lock.mjs points vpay.lock.json at the new tag (and vpay-skills
+#     at its current `main`), records where the lock came from, and CLEARS
+#     both `verifiedAt` fields;
+#   - verify-parity.mjs then fails on that PR and lists every page whose vpay
+#     sources changed between the two tags, plus any vpay page with no page
+#     here, so the PR's own CI is red on exactly the work.
 #
-# Triggers: a poll (vpay needs no token for this repository), a manual run for
-# any tag, and `repository_dispatch: vpay-release` so vpay's release.yml CAN
-# notify this immediately if someone later gives it a token to do so. Nothing
-# depends on that dispatch; the poll is the mechanism.
+# A person re-reads those pages on the branch, fixes what changed, writes a
+# date back into both `verifiedAt` fields, and marks the PR ready. The bot
+# never signs the lock off, because "the files still exist" is not "the pages
+# are true".
+#
+# vpay's own release is never blocked by any of this. Its images, chart and
+# SDKs publish from vpay's release.yml whatever happens here.
+#
+# Why a GitHub App token and not GITHUB_TOKEN: GitHub raises no workflow
+# events for anything done with the default token, so a PR opened with it
+# would get no `verify` run, and the red-on-the-work signal above would never
+# appear. The token comes from the org's `vaam-apps` app (the one
+# release-please uses in vaam-apps/vpay), through the org secrets
+# RELEASE_PLEASE_APP_CLIENT_ID and RELEASE_PLEASE_APP_PRIVATE_KEY. It is minted
+# for THIS repository only, with contents + pull-requests + issues (labels).
+# There is deliberately no GITHUB_TOKEN fallback: a fallback is exactly the
+# silent PR-with-no-CI this is written to avoid.
+#
+# Triggers: a poll every 3 hours (the mechanism); `repository_dispatch:
+# vpay-release`, sent by vaam-apps/vpay's notify-docs workflow the moment a
+# tag lands (the fast path); and a manual run for any tag.
 
 on:
   schedule:
@@ -28,7 +46,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: ${{ github.workflow }}
@@ -61,8 +78,11 @@ jobs:
             echo "::error::'$tag' is not a vX.Y.Z tag"; exit 2
           fi
           locked="$(jq -r .vpay.tag vpay-docs/vpay.lock.json)"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "locked=$locked" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$tag"
+            echo "locked=$locked"
+            echo "branch=parity/vpay-$tag"
+          } >> "$GITHUB_OUTPUT"
           if [ "$tag" = "$locked" ]; then
             echo "current=true" >> "$GITHUB_OUTPUT"
             echo "### vpay-docs is verified against vpay $tag, the latest release" >> "$GITHUB_STEP_SUMMARY"
@@ -70,18 +90,33 @@ jobs:
             echo "current=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Close parity issues the lock has caught up with
-        if: steps.target.outputs.current == 'true'
+      - name: Mint a GitHub App token for this repository
+        id: app-token
+        if: steps.target.outputs.current == 'false'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_PLEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      # One PR per release, and a person's work on it is never overwritten:
+      # if the branch already exists, this run only reports.
+      - name: Is there already a parity PR for this release?
+        id: existing
+        if: steps.target.outputs.current == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
-          LOCKED: ${{ steps.target.outputs.locked }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.target.outputs.branch }}
         run: |
           set -euo pipefail
-          gh issue list --repo "$GITHUB_REPOSITORY" --label parity --state open \
-            --json number --jq '.[].number' | while read -r n; do
-            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
-              --comment "vpay.lock.json now names $LOCKED, vpay's latest release. Closing."
-          done
+          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state all \
+                  --json number,state --jq '[.[] | select(.state != "CLOSED")][0].number // empty')"
+          branch_exists=false
+          if gh api "repos/$GITHUB_REPOSITORY/branches/$BRANCH" >/dev/null 2>&1; then branch_exists=true; fi
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "branch_exists=$branch_exists" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.target.outputs.current == 'false'
@@ -89,8 +124,8 @@ jobs:
           repository: vaam-apps/vpay
           ref: ${{ steps.target.outputs.tag }}
           path: vpay
-          # The release check diffs the locked tag against the new one, so both
-          # must be in the clone.
+          # The stale-page list diffs the locked tag against the new one, so
+          # both must be in the clone.
           fetch-depth: 0
           persist-credentials: false
 
@@ -117,8 +152,7 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: vpay-docs
 
-      - name: verify-parity --release
-        id: gate
+      - name: Parity report against the new release
         if: steps.target.outputs.current == 'false'
         working-directory: vpay-docs
         env:
@@ -126,46 +160,102 @@ jobs:
         run: |
           set +e
           node tools/verify-parity.mjs --vpay ../vpay --skills ../vpay-skills \
-            --release "$TAG" --report parity-report.md
-          echo "exit=$?" >> "$GITHUB_OUTPUT"
-          cat parity-report.md >> "$GITHUB_STEP_SUMMARY"
+            --release "$TAG" --report release-report.md
+          cat release-report.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Open or update the release's parity issue
-        if: steps.target.outputs.current == 'false'
+      - name: Open the draft parity PR
+        id: open
+        if: steps.target.outputs.current == 'false' && steps.existing.outputs.pr == '' && steps.existing.outputs.branch_exists == 'false'
         working-directory: vpay-docs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           TAG: ${{ steps.target.outputs.tag }}
-          RUN_URL:
-            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
-            github.run_id }}
+          LOCKED: ${{ steps.target.outputs.locked }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          title="Parity with vpay $TAG"
+          set +e
+          node tools/bump-lock.mjs --tag "$TAG" --vpay ../vpay --skills ../vpay-skills
+          code=$?
+          set -e
+          if [ "$code" = 3 ]; then
+            echo "### $TAG is not newer than the locked $LOCKED; no PR opened" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [ "$code" = 0 ] || exit "$code"
+          pnpm exec prettier --write vpay.lock.json
+
+          # The report the PR's own CI will reproduce: unsigned lock, stale pages.
+          set +e
+          node tools/verify-parity.mjs --vpay ../vpay --skills ../vpay-skills --report pr-report.md
+          set -e
+
+          bot_id="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add vpay.lock.json
+          git commit -m "chore(parity): point the lock at vpay $TAG, unsigned" \
+            -m "Mechanical half only: tag, ref, date and the vpay-skills ref. Both verifiedAt fields are cleared, so verify-parity fails until a person has re-read the stale pages and signs the lock off."
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+
           {
-            echo "vpay released [\`$TAG\`](https://github.com/vaam-apps/vpay/releases/tag/$TAG). These pages are still verified against an older release, so this issue lists what that release changed under them."
+            echo "vpay released [\`$TAG\`](https://github.com/vaam-apps/vpay/releases/tag/$TAG). These pages are verified against \`$LOCKED\`."
             echo
-            echo "**To close it:** re-read each stale page against vpay at \`$TAG\`, add a page for each uncovered vpay path, bump \`vpay.lock.json\` (and \`skills.ref\`, if vpay-skills moved), and open a PR. This issue closes on the first scheduled run after that merges."
+            echo "This PR does the mechanical half: \`vpay.lock.json\` now names \`$TAG\`, with both \`verifiedAt\` fields **cleared**. Its \`verify\` check therefore fails, and it lists every page whose vpay sources changed since \`$LOCKED\`, plus any vpay page that has no page here."
             echo
-            cat parity-report.md
+            echo "**To finish it:**"
+            echo "1. Check out \`$BRANCH\`. Re-read each page below against vpay at \`$TAG\` and fix what changed, including status chips and \"Status in …\" sections."
+            echo "2. Add a page for every uncovered vpay path."
+            echo "3. Set \`vpay.verifiedAt\` and \`skills.verifiedAt\` to today's date."
+            echo "4. When \`verify\` is green, mark this PR ready."
             echo
-            echo "_Last checked by [this run]($RUN_URL)._"
-          } > issue.md
+            echo "Setting the dates is a claim that someone read the pages. Don't set them just to turn the check green."
+            echo
+            echo "### The work"
+            echo
+            sed -n '/^### vpay → docs/,/^### unverified/p' pr-report.md | sed '$d' | sed "s/^- \`/- [ ] \`/"
+            sed -n '/^### Stale pages/,$p' pr-report.md | sed "s/^- \`docs/- [ ] \`docs/"
+            echo
+            echo "<details><summary>Full parity report</summary>"
+            echo
+            cat pr-report.md
+            echo
+            echo "</details>"
+            echo
+            echo "_Opened by [release-parity]($RUN_URL). vpay's own release was not blocked._"
+          } > pr-body.md
+
           gh label create parity --repo "$GITHUB_REPOSITORY" --color B45309 \
             --description "vpay-docs is behind a vpay release" --force
-          n="$(gh issue list --repo "$GITHUB_REPOSITORY" --label parity --state open \
-                 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n1)"
-          if [ -n "$n" ]; then
-            gh issue edit "$n" --repo "$GITHUB_REPOSITORY" --body-file issue.md
-          else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label parity --body-file issue.md
-          fi
+          url="$(gh pr create --repo "$GITHUB_REPOSITORY" --draft --base main --head "$BRANCH" \
+                   --title "docs: parity with vpay $TAG" --label parity --body-file pr-body.md)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### Opened $url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fail while the docs are behind
-        if: steps.target.outputs.current == 'false'
+      # An older release's PR is not closed: it may carry someone's work.
+      - name: Point older parity PRs at the new one
+        if: steps.open.outputs.url != ''
         env:
-          CODE: ${{ steps.gate.outputs.exit }}
-          TAG: ${{ steps.target.outputs.tag }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          URL: ${{ steps.open.outputs.url }}
+          BRANCH: ${{ steps.target.outputs.branch }}
         run: |
-          echo "::error::vpay-docs is not verified against vpay $TAG (verify-parity exit $CODE). vpay's release was not blocked; see the parity issue."
-          exit 1
+          set -euo pipefail
+          gh pr list --repo "$GITHUB_REPOSITORY" --label parity --state open \
+            --json number,headRefName --jq ".[] | select(.headRefName != \"$BRANCH\") | .number" |
+          while read -r n; do
+            gh pr comment "$n" --repo "$GITHUB_REPOSITORY" \
+              --body "A newer vpay release has its own parity PR: $URL. Finish or close this one first; it is not closed automatically, because it may carry someone's work."
+          done
+
+      - name: Already open
+        if: steps.target.outputs.current == 'false' && (steps.existing.outputs.pr != '' || steps.existing.outputs.branch_exists == 'true')
+        env:
+          PR: ${{ steps.existing.outputs.pr }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          echo "### A parity PR for this release already exists (${PR:-branch $BRANCH}); nothing was pushed." >> "$GITHUB_STEP_SUMMARY"

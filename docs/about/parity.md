@@ -26,24 +26,39 @@ release made stale.
 ```mermaid
 flowchart TD
   tag(["vpay tags vX.Y.Z<br/><i>release-please</i>"])
-  poll["release-parity workflow<br/>every 3 hours, or on dispatch"]
+  notify["vpay's notify-docs<br/>sends a dispatch<br/><i>pending vaam-apps/vpay#246</i>"]
+  poll["release-parity workflow<br/>on dispatch, or every 3 hours"]
   same{"lock names<br/>vX.Y.Z already?"}
-  gate["verify-parity --release vX.Y.Z<br/>against vpay at the new tag"]
-  issue["issue: Parity with vpay vX.Y.Z<br/>lists stale pages and gaps<br/>job goes red"]
-  pr["a person re-reads each stale page,<br/>fixes what changed,<br/>bumps vpay.lock.json"]
-  ci["verify workflow<br/>parity + build, against the new lock"]
+  done(["nothing to do"])
+  bot["the vaam-apps app opens a draft PR<br/>lock → vX.Y.Z, verifiedAt cleared"]
+  red["the PR's verify check fails<br/>and lists every stale page"]
+  person["a person re-reads each page,<br/>fixes what changed,<br/>writes the dates back"]
+  green["verify goes green<br/>PR marked ready, merged"]
   deploy["deploy to GitHub Pages"]
-  close["issue closed"]
-  tag --> poll --> same
-  same -- yes --> close
-  same -- no --> gate --> issue --> pr --> ci --> deploy --> poll
+  tag --> notify --> poll
+  tag -. "if the dispatch is lost" .-> poll
+  poll --> same
+  same -- yes --> done
+  same -- no --> bot --> red --> person --> green --> deploy
 ```
 
 **vpay's release is never blocked by this.** Its images, chart and SDKs publish
 on their own schedule. What the loop blocks is this site _claiming_ a release it
 hasn't been re-read against. Until someone bumps the lock, the site keeps saying
-"verified against" the older tag, which is still true, and the red issue says
-which pages are behind.
+"verified against" the older tag, which is still true, and the draft PR's red
+check says which pages are behind.
+
+The PR is opened with a token from the org's `vaam-apps` GitHub App, not the
+workflow's default token. GitHub runs no workflows for anything the default
+token does, so a PR opened with it would get no check at all. The bot does the
+mechanical half: it moves the tag, the commit and the vpay-skills commit, and
+it records where the lock came from. It **never** writes the `verifiedAt`
+dates. Only a person does that, and until they do the check stays red.
+
+The fast path, a dispatch from vpay's own `notify-docs` workflow the moment a
+tag lands, is proposed in
+[vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246) and is not
+merged yet. Until it is, the 3-hourly poll is the only trigger.
 
 ## What the check refuses
 
@@ -51,14 +66,15 @@ which pages are behind.
 vpay-skills' `verify-coverage` do the same, for the same reason: a map checked
 in only one direction goes stale in the direction nobody checks.
 
-| Direction     | Fails when                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| vpay → docs   | a `docs/flows/` page, a runbook, an ADR or an `sdks/` package exists in vpay and no page here lists it in its `sources:`  |
-| docs → vpay   | a page's `sources:` entry, or a `vpay:` link in its text, names a path that doesn't exist at the tag                      |
-| docs → skills | a page names a skill that vpay-skills doesn't have                                                                        |
-| skills → docs | vpay-skills has a skill that no page here references                                                                      |
-| lock          | `vpay.lock.json` names a tag that doesn't exist, or whose commit isn't the one recorded                                   |
-| release       | run with `--release vX.Y.Z` for a tag newer than the lock. It lists every page whose sources changed between the two tags |
+| Direction     | Fails when                                                                                                                                   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| vpay → docs   | a `docs/flows/` page, a runbook, an ADR or an `sdks/` package exists in vpay and no page here lists it in its `sources:`                     |
+| docs → vpay   | a page's `sources:` entry, or a `vpay:` link in its text, names a path that doesn't exist at the tag                                         |
+| docs → skills | a page names a skill that vpay-skills doesn't have                                                                                           |
+| skills → docs | vpay-skills has a skill that no page here references                                                                                         |
+| lock          | `vpay.lock.json` names a tag that doesn't exist, or whose commit isn't the one recorded                                                      |
+| release       | run with `--release vX.Y.Z` for a tag newer than the lock. It lists every page whose sources changed between the two tags                    |
+| unverified    | `vpay.lock.json` has a `verifiedAt` set to `null`, as the bot's PR leaves it. It lists the pages whose sources changed since `vpay.previous` |
 
 The last row is what makes a release actionable. It isn't a vague "the docs
 might be stale". It prints the pages, and for each one the vpay files that
@@ -113,7 +129,8 @@ exists.
 
 It checks that a claim **exists**, not that it is **true**. A page can list
 `docs/flows/ledger.md` in its sources and still misdescribe the ledger. That is
-why a release produces an issue for a person rather than an automatic lock bump.
+why a release produces a draft PR that a person must sign off, rather than an
+automatic lock bump.
 The stale list tells a reviewer where to look. It can't do the reading for them.
 
 Three smaller blind spots, stated so nobody mistakes them for coverage:

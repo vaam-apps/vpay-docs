@@ -99,8 +99,8 @@ release-please from commit subjects. It is copied here at build time and
 never edited.
 
 ::: tip These docs move with the releases
-When vpay tags a release newer than ${tag}, the parity check opens an issue
-listing every page whose sources changed. See
+When vpay tags a release newer than ${tag}, the parity check opens a draft
+pull request listing every page whose sources changed. See
 [how these docs stay current](/about/parity).
 :::
 

@@ -233,7 +233,24 @@ for (const s of skillNames) {
 }
 
 // ---- release -------------------------------------------------------------------------
-const stale = [];
+// Pages whose vpay sources (or `vpay:` link targets) changed between two refs.
+function staleBetween(fromRef, toRef) {
+  const changed = (git("diff", "--name-only", fromRef, toRef) ?? "")
+    .split("\n")
+    .filter(Boolean);
+  const touches = (path) => {
+    const p = path.replace(/\/+$/, "");
+    return changed.filter((c) => c === p || c.startsWith(`${p}/`));
+  };
+  const out = [];
+  for (const p of pages) {
+    const hits = [...new Set([...p.sources, ...p.links.vpay].flatMap(touches))];
+    if (hits.length) out.push({ page: p.rel, hits });
+  }
+  return { changed: changed.length, stale: out };
+}
+
+let stale = [];
 let drift = null;
 if (!lockedRef) {
   fail(
@@ -246,24 +263,16 @@ if (!lockedRef) {
     `vpay.lock.json says ${lock.vpay.tag} is ${lock.vpay.ref.slice(0, 8)}; the checkout says ${lockedRef.slice(0, 8)}.`,
   );
 }
+
 if (releaseTag && lockedRef && releaseTag !== lock.vpay.tag) {
-  const changed = (git("diff", "--name-only", lockedRef, "HEAD") ?? "")
-    .split("\n")
-    .filter(Boolean);
+  const d = staleBetween(lockedRef, "HEAD");
+  stale = d.stale;
   drift = {
     from: lock.vpay.tag,
     to: releaseTag,
     commits: Number(git("rev-list", "--count", `${lockedRef}..HEAD`) ?? 0),
-    changed: changed.length,
+    changed: d.changed,
   };
-  const touches = (path) => {
-    const p = path.replace(/\/+$/, "");
-    return changed.filter((c) => c === p || c.startsWith(`${p}/`));
-  };
-  for (const p of pages) {
-    const hits = [...new Set([...p.sources, ...p.links.vpay].flatMap(touches))];
-    if (hits.length) stale.push({ page: p.rel, hits });
-  }
   fail(
     "release",
     `these pages are verified against ${lock.vpay.tag}; vpay has released ${releaseTag}. ` +
@@ -271,10 +280,51 @@ if (releaseTag && lockedRef && releaseTag !== lock.vpay.tag) {
   );
 }
 
+// A lock the parity bot moved, that no person has signed off yet. The bot
+// (tools/bump-lock.mjs, from release-parity.yml) points the lock at a new tag
+// and sets `verifiedAt: null`, keeping where it came from in `previous`. Until
+// a person re-reads the stale pages and writes a date back, this fails and
+// lists them — which is what makes the bot's PR red on exactly the work.
+const unsigned = [
+  lock.vpay.verifiedAt == null ? "vpay.verifiedAt" : null,
+  lock.skills.verifiedAt == null ? "skills.verifiedAt" : null,
+].filter(Boolean);
+if (unsigned.length) {
+  const prev = lock.vpay.previous;
+  if (lock.vpay.verifiedAt == null && prev?.ref && lockedRef) {
+    if (!git("rev-parse", `${prev.ref}^{commit}`)) {
+      fail(
+        "unverified",
+        `vpay.lock.json's previous ref ${prev.ref.slice(0, 8)} (${prev.tag}) is not in this checkout; fetch full history.`,
+      );
+    } else {
+      const d = staleBetween(prev.ref, lockedRef);
+      stale = d.stale;
+      drift = {
+        from: prev.tag,
+        to: lock.vpay.tag,
+        commits: Number(
+          git("rev-list", "--count", `${prev.ref}..${lockedRef}`) ?? 0,
+        ),
+        changed: d.changed,
+      };
+    }
+  }
+  fail(
+    "unverified",
+    `vpay.lock.json has ${unsigned.join(" and ")} unset: it was moved` +
+      (lock.vpay.previous?.tag
+        ? ` from ${lock.vpay.previous.tag} to ${lock.vpay.tag}`
+        : "") +
+      ` and nobody has signed it off. Re-read the ${stale.length} stale page(s) below` +
+      ` against vpay ${lock.vpay.tag}, fix what changed, then set each to today's date.`,
+  );
+}
+
 // ---- report --------------------------------------------------------------------------
 const summary = [
   `vpay checkout: ${head ? head.slice(0, 8) : "(not a git checkout)"}${headTag ? ` (${headTag})` : ""}`,
-  `locked:        ${lock.vpay.tag} (${lock.vpay.ref.slice(0, 8)}), verified ${lock.vpay.verifiedAt}`,
+  `locked:        ${lock.vpay.tag} (${lock.vpay.ref.slice(0, 8)}), ${lock.vpay.verifiedAt ? `verified ${lock.vpay.verifiedAt}` : "NOT signed off"}`,
   `pages:         ${pages.length}, claiming ${claimed.size} vpay paths; ${required.length} required`,
   `skills:        ${referenced.size} referenced of ${skillNames.size} in vpay-skills`,
 ];

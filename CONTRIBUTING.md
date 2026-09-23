@@ -55,20 +55,27 @@ Never hard-code `blob/v0.4.1/...`. It is wrong the day the lock moves.
 - **No fabricated screenshots.** A picture of a UI must be a capture of vpay's
   real UI at the locked tag, and its caption says where it came from.
 
-## Bumping the lock (a new vpay release)
+## Finishing a parity PR (a new vpay release)
 
-The `release-parity` issue lists the work. Then:
+`release-parity` opens a draft PR titled `docs: parity with vpay vX.Y.Z`, on
+the branch `parity/vpay-vX.Y.Z`. Its first commit, from the `vaam-apps` bot,
+already points the lock at the new tag and clears both `verifiedAt` fields.
+Its `verify` check is red, and its body lists the work. Then:
 
-1. `git -C ../vpay fetch --tags && git -C ../vpay checkout vX.Y.Z`
-2. `node tools/verify-parity.mjs --release vX.Y.Z` prints the stale pages and
-   any vpay page with no page here.
+1. `git fetch && git switch parity/vpay-vX.Y.Z`, and
+   `git -C ../vpay fetch --tags && git -C ../vpay checkout vX.Y.Z`
+2. `pnpm verify` prints every stale page, meaning every page whose vpay
+   sources changed since `vpay.previous`, and any vpay page with no page here.
 3. Re-read every stale page against vpay at the new tag. Fix what changed,
    including **Status** sections, and write pages for anything uncovered.
-4. Update `vpay.lock.json`: `vpay.tag`, `vpay.ref`
-   (`git -C ../vpay rev-parse vX.Y.Z^{commit}`), `vpay.tagDate`,
-   `vpay.verifiedAt`. If vpay-skills moved, also `skills.ref` and
-   `skills.verifiedAt`.
-5. `pnpm verify && pnpm build`, then open the PR and link the parity issue.
+4. Set `vpay.verifiedAt` and `skills.verifiedAt` in `vpay.lock.json` to
+   today's date. Leave `vpay.previous` in place: it records where this lock
+   came from.
+5. `pnpm verify && pnpm build`, push, and mark the PR ready.
+
+With no bot PR, for example to verify against a tag by hand, run
+`node tools/bump-lock.mjs --tag vX.Y.Z` to get the same unsigned starting
+point.
 
 A bump is a claim that someone read the pages. Don't bump it to turn a check
 green.
