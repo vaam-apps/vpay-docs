@@ -43,9 +43,10 @@ Two workflows run it:
   does the parity check, prettier and a production build against exactly what
   the lock names. On `main` it deploys to Pages.
 - [`release-parity.yml`](.github/workflows/release-parity.yml) runs every 3
-  hours, and on a `vpay-release` dispatch from vpay's `notify-docs` workflow
-  once [vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)
-  merges. When vpay's latest release is newer than the lock, it opens **one
+  hours, and on the `vpay-release` dispatch vpay's `notify-docs` workflow
+  sends when a tag lands (merged in
+  [vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246); it has not
+  run on a real tag yet). When vpay's latest release is newer than the lock, it opens **one
   draft PR** for that release, using the org's `vaam-apps` App token so the PR
   gets CI. The PR points the lock at the new tag and **clears both
   `verifiedAt` dates**, so its `verify` check fails and lists every stale

@@ -26,7 +26,7 @@ release made stale.
 ```mermaid
 flowchart TD
   tag(["vpay tags vX.Y.Z<br/><i>release-please</i>"])
-  notify["vpay's notify-docs<br/>sends a dispatch<br/><i>pending vaam-apps/vpay#246</i>"]
+  notify["vpay's notify-docs<br/>sends a dispatch"]
   poll["release-parity workflow<br/>on dispatch, or every 3 hours"]
   same{"lock names<br/>vX.Y.Z already?"}
   done(["nothing to do"])
@@ -55,10 +55,12 @@ mechanical half: it moves the tag, the commit and the vpay-skills commit, and
 it records where the lock came from. It **never** writes the `verifiedAt`
 dates. Only a person does that, and until they do the check stays red.
 
-The fast path, a dispatch from vpay's own `notify-docs` workflow the moment a
-tag lands, is proposed in
-[vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246) and is not
-merged yet. Until it is, the 3-hourly poll is the only trigger.
+The fast path is a `vpay-release` dispatch from vpay's own
+[`notify-docs`](https://github.com/vaam-apps/vpay/blob/master/.github/workflows/notify-docs.yml) workflow the moment a
+tag lands. It merged on 2026-09-23
+([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)) and has
+not run on a real tag yet; the first vpay release after it is its first run.
+The 3-hourly poll stays as the fallback.
 
 ## What the check refuses
 
