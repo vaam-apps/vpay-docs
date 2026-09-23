@@ -6,6 +6,7 @@ import PageProvenance from "./components/PageProvenance.vue";
 import PageStatus from "./components/PageStatus.vue";
 import Status from "./components/Status.vue";
 import SkillTable from "./components/SkillTable.vue";
+import Release from "./components/Release.vue";
 import "./custom.css";
 
 export default {
@@ -19,5 +20,6 @@ export default {
     app.component("Mermaid", Mermaid);
     app.component("Status", Status);
     app.component("SkillTable", SkillTable);
+    app.component("Release", Release);
   },
 } satisfies Theme;

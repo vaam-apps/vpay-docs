@@ -25,7 +25,7 @@ like cards. MTN MoMo and Orange Money are the first two adapters. Neither of
 them defines the architecture.
 
 ::: danger vpay has never taken a real payment
-At v0.4.1 vpay is a **scaffold**. It compiles, lints clean and its tests pass,
+At <Release /> vpay is a **scaffold**. It compiles, lints clean and its tests pass,
 but it cannot take a payment. **Do not deploy it.** Every payment in its history
 has settled against a WireMock stub, with one exception: a single MTN
 **sandbox** charge on 2026-09-15. See [What works today](/guide/status).
@@ -126,7 +126,7 @@ flowchart LR
 
 `GET /v1/balance` is not routed anywhere, and it answers an honest `404`. A
 refund can be created, but a `201` does not mean money came back. Nothing in
-v0.4.1 settles a `pending` refund, and no rail has ever refunded anything.
+<Release /> settles a `pending` refund, and no rail has ever refunded anything.
 
 ### The two web apps and the SDKs
 
@@ -140,9 +140,17 @@ v0.4.1 settles a `pending` refund, and no rail has ever refunded anything.
   (`@vaam-apps/vpay-sdk`) are held to one capability matrix. `sdks/stripe-js`
   (`@vaam-apps/vpay-stripe-js`) is the browser client for a payer's page.
   `sdks/stripe-compat` drives the official `stripe` package against a live
-  stack, and `sdks/flutter` holds a Flutter checkout plugin. No test inside
-  `sdks/nodejs` itself has ever talked to a vpay: every server in that package's
-  own tests is a `node:http` stub. See [SDKs](/sdks/).
+  stack. Most of `sdks/nodejs`'s own tests answer themselves through a
+  `node:http` stub, but its two live suites (`invoices.live.test.ts` and
+  `refunds.live.test.ts`) drive a real `vpay-server`, and CI's `e2e` job runs
+  them. See [SDKs](/sdks/).
+- **Payer-device plugins.** `sdks/flutter` (`vpay_checkout_flutter`) and
+  `sdks/tauri` (`tauri-plugin-vpay-checkout`, since 2026-09-22) open vpay's
+  hosted checkout page on the payer's device and learn the outcome by polling
+  the intent, never by reading a URL. They are not merchant SDKs. **Neither is
+  built or tested by `just ci`**, apart from the Tauri plugin's TypeScript
+  half. See [Mobile checkout](/checkout/mobile) and
+  [Tauri checkout](/checkout/tauri).
 
 ## The repository layout
 
@@ -161,7 +169,7 @@ flowchart TB
     subgraph SD["sdks/"]
         SR["rust, nodejs"]
         SJ["stripe-js, stripe-compat"]
-        SF["flutter"]
+        SF["flutter, tauri<br/>payer-device plugins"]
     end
     EX["examples/<br/>merchant-demo, shop, checkout-browser, ..."]
     SC["schemas/vpay.cstack"]
@@ -196,7 +204,7 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 ([ADR-0002](vpay:docs/adr/0002-provider-port.md),
 [Provider port](/rails/provider-port)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                  | Status                   | Evidence                                                                                       |
 | ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |

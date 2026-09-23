@@ -201,9 +201,16 @@ digest in Helm values.
 - Before tagging: `master` green, and `Chart.yaml`'s `version:`, `appVersion`
   and the tag in agreement, or `publish-chart` refuses.
 - Pin by digest; there is no `latest`. A failed run is re-run, never re-tagged.
+- The same tag push runs `notify-docs.yml`, a separate workflow that tells
+  vaam-apps/vpay-docs a release landed; it cannot block or fail the release,
+  and `gh workflow run notify-docs.yml -R vaam-apps/vpay -f tag=vX.Y.Z`
+  re-sends the announcement by hand. vpay-docs also polls every 3 hours, so a
+  missed dispatch costs only latency.
 
 _Evidence:_ the workflow has run on `master` and on tags. `cosign verify` has
-never been run by anyone against anything this repository produced.
+never been run by anyone against anything this repository produced. The
+runbook, as of <Release />, records `notify-docs.yml` as not yet run on a real
+tag.
 [docs/runbooks/release.md](vpay:docs/runbooks/release.md) · background:
 [Deployment](/operate/deployment#the-release-pipeline)
 
@@ -262,10 +269,11 @@ _Evidence:_ no real rail credential had been used when this was written, and no
 **When:** bringing vpay up from nothing on one machine and walking payments
 through both rails.
 
-- `just demo` generates throwaway keys, builds the images, boots Postgres, three
-  WireMock hosts, the server and the worker, then runs `examples/merchant-demo`:
-  six payments, every outcome each rail documents, each walked to its signed
-  webhook.
+- `just demo` generates throwaway keys, builds the images, and boots nine
+  services — Postgres, three WireMock hosts (MTN, Orange, the webhook receiver),
+  the server, the worker, vpay's checkout page, the demo shop and the dashboard
+  — then runs `examples/merchant-demo`: six payments, every outcome each rail
+  documents, each walked to its signed webhook.
 - `just demo-down` removes containers **and** volumes.
 - Its output is a pasted real run, and it found a real confirm/worker race that
   was then fixed.
@@ -308,7 +316,7 @@ _Evidence:_ the one page whose commands have run against a real rail, on
 [docs/runbooks/live-sandbox-test.md](vpay:docs/runbooks/live-sandbox-test.md) ·
 background: [MTN MoMo](/rails/mtn-momo)
 
-## Status in v0.4.1
+## Status in this release
 
 | Runbook group                                       | Status                  | Evidence                                                                             |
 | --------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |

@@ -74,15 +74,18 @@ The enum itself (`IntentStatus` in `vpay_core::state`) has exactly five values:
 `canceled`. There is no `requires_confirmation` — `confirm` always submits — and
 no `failed`.
 
-::: info This diagram follows the code, not vpay's flow doc
-vpay's [payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md#states)
-draws a `requires_action → processing` step. The code at v0.4.1 never takes it,
-so it is not drawn here. The settlement's guard accepts an intent in
-`processing`, `requires_action` **or** `requires_payment_method`
-(`SETTLEABLE_STATUSES` in `vpay_db::payment_intents`). A redirect charge's
-intent stays in `requires_action` until the worker settles it, and a settlement
-can also land on an intent still in `requires_payment_method` when a confirm
-crashed before moving it — see [crash safety](/payments/crash-safety).
+::: info A redirect intent settles straight from `requires_action`
+There is no `requires_action → processing` step. vpay's
+[payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md#states) drew one
+until v0.5.0, which corrected the diagram to match the code. The settlement's
+guard accepts an intent in `processing`, `requires_action` **or**
+`requires_payment_method` (`SETTLEABLE_STATUSES` in `vpay_db::payment_intents`).
+A redirect charge's intent stays in `requires_action` until the worker settles
+it, and a settlement can also land on an intent still in
+`requires_payment_method` when a confirm crashed before moving it — see
+[crash safety](/payments/crash-safety). A redirect submit whose response is
+lost never reaches `requires_action` at all: the charge stays `submitting` and
+the intent stays `requires_payment_method`.
 :::
 
 ### The rules behind the transitions
@@ -218,7 +221,7 @@ rail: MTN can produce all eleven, Orange only three. See
   and a human is alerted; the intent stays where it is and polling continues
   hourly. See [the reconciler](/payments/reconciler).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                              | Status                   | Evidence                                                                                            |
 | ----------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |

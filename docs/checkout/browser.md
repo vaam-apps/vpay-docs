@@ -29,8 +29,9 @@ Agents working on this should load [vpay-checkout](skill:vpay-checkout).
 ::: info Why not Stripe.js itself?
 `@stripe/stripe-js` cannot be pointed at another API — it has no base-URL option
 and its loader hardcodes `https://js.stripe.com`. So vpay ships its own package,
-Stripe.js-_shaped_. Its README at v0.4.1 still says it is **not yet on the npm
-registry**. Inside the vpay workspace it is a `workspace:*` dependency.
+Stripe.js-_shaped_. It has been on the npm registry since 2026-09-19 —
+`pnpm add @vaam-apps/vpay-stripe-js` — published by vpay's release workflow on
+each release tag. Inside the vpay workspace it is a `workspace:*` dependency.
 :::
 
 ## The credential model
@@ -273,12 +274,12 @@ opens a real popup.
   proves only that a browser was pointed there. Poll, and fulfil from the
   [webhook](/api/webhooks).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                               | Status                   | Evidence                                                                                              |
 | -------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
 | `/v1/browser` routes, uniform `404`, CORS, secrets | <Status s="built" />     | `backends/tests/integration/tests/browser_checkout.rs` — real Postgres, WireMock MTN, shipping router |
-| `@vaam-apps/vpay-stripe-js`                        | <Status s="partial" />   | Vitest suite against a real `node:http` stub of `/v1/browser`; its README says it is not yet on npm   |
+| `@vaam-apps/vpay-stripe-js`                        | <Status s="partial" />   | Vitest suite against a real `node:http` stub of `/v1/browser`; published on npm since 2026-09-19      |
 | `examples/checkout-browser` in a real browser      | <Status s="partial" />   | `checkout.cy.ts` against the compose stack, MTN push only                                             |
 | Redirect return trip via a checkout session        | <Status s="partial" />   | Driven in `shop-hosted.cy.ts` — against a WireMock stub of Orange's page                              |
 | Popup mode                                         | <Status s="unproven" />  | Stub windows only                                                                                     |

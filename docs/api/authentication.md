@@ -88,7 +88,10 @@ sequenceDiagram
 | `jti`          | a fresh UUIDv4 per assertion, spent exactly once server-side                                  |
 | `exp`          | `now + lifetime`, lifetime 1–300 s (the SDKs default to 60)                                   |
 
-The OP allows 60 seconds of clock leeway.
+The OP allows 60 seconds of clock leeway. Spent `jti`s do not pile up: the
+worker's hourly `sweep_expired` job deletes the expired ones, so the table holds
+at most about an hour's worth of expired rows. The delete itself is tested; no
+test asserts that the job runs it.
 
 ::: warning `aud` is what vpay calls itself, not the URL you POST to
 The OP compares `aud` against exactly two strings, both derived from
@@ -204,17 +207,17 @@ exit `78`. Nobody has rotated one on a deployment — see
 - **The signing-key PEM is not zeroized** in memory.
   :::
 
-## Status in v0.4.1
+## Status in this release
 
-| Part                                        | Status                   | Evidence                                                                                                              |
-| ------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Token endpoint, discovery, JWKS             | <Status s="built" />     | `merchant_token_flow.rs` boots a real router against a real Postgres; runs in CI                                      |
-| Replay protection (`jti` spent once)        | <Status s="built" />     | `the_same_client_assertion_cannot_be_spent_twice`                                                                     |
-| Kill switch (`disabled_clients`)            | <Status s="built" />     | `a_disabled_client_is_refused_with_invalid_client_and_401`, no restart in between                                     |
-| Rust SDK handshake                          | <Status s="built" />     | verified by the real pinned verifier and against a real router                                                        |
-| Node SDK handshake                          | <Status s="partial" />   | reaches a live stack through `sdks/stripe-compat`; its own conformance bridge to the real verifier is a manual recipe |
-| Per-merchant `jti` namespace, rate limiting | <Status s="not-built" /> | recorded limitations from the 2026-09-02 security review                                                              |
-| A real merchant completing the handshake    | <Status s="not-built" /> | no vpay outside a test process has ever done it                                                                       |
+| Part                                        | Status                   | Evidence                                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token endpoint, discovery, JWKS             | <Status s="built" />     | `merchant_token_flow.rs` boots a real router against a real Postgres; runs in CI                                                                                                                  |
+| Replay protection (`jti` spent once)        | <Status s="built" />     | `the_same_client_assertion_cannot_be_spent_twice`                                                                                                                                                 |
+| Kill switch (`disabled_clients`)            | <Status s="built" />     | `a_disabled_client_is_refused_with_invalid_client_and_401`, no restart in between                                                                                                                 |
+| Rust SDK handshake                          | <Status s="built" />     | verified by the real pinned verifier and against a real router                                                                                                                                    |
+| Node SDK handshake                          | <Status s="built" />     | its live suites (`invoices.live.test.ts`, `refunds.live.test.ts`) start with it against a real `vpay-server` in CI's `e2e` job; the conformance bridge to the Rust verifier stays a manual recipe |
+| Per-merchant `jti` namespace, rate limiting | <Status s="not-built" /> | recorded limitations from the 2026-09-02 security review                                                                                                                                          |
+| A real merchant completing the handshake    | <Status s="not-built" /> | no vpay outside a test process has ever done it                                                                                                                                                   |
 
 The full record is
 [docs/flows/merchant-auth.md § Status](vpay:docs/flows/merchant-auth.md#status).

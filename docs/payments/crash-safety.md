@@ -199,7 +199,7 @@ dead-lettering.
 - **Graceful stops** are covered on
   [the reconciler page](/payments/reconciler#sigterm-and-the-drain).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                 | Status                   | Evidence                                                                                                                           |
 | ---------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

@@ -18,7 +18,7 @@ movement is a **transaction** made of **entries** whose debits and credits
 balance. It is separate from the operational tables (`payment_intents`,
 `charges`, `refunds`) on purpose — a ledger must not change when an operational
 row does. This page explains the accounts, what gets posted when, and exactly
-how much of it is live at v0.4.1: the writer exists and is wired into
+how much of it is live at <Release />: the writer exists and is wired into
 settlement, but **no deployment has ever produced a ledger row**, because no
 deployment has ever taken a payment.
 
@@ -147,7 +147,7 @@ back. It is **reported to the merchant and posted nowhere**, by decision: who
 bears it is a marketplace judgement, not something a rail's response contains.
 And no rail reports a refund fee to vpay today, so the column is never written.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                   | Evidence                                                                                         |
 | ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
