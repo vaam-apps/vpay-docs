@@ -2,7 +2,8 @@
 
 Human documentation for [vpay](https://github.com/vaam-apps/vpay), a
 Stripe-shaped payment gateway for Cameroon mobile money rails. Built with
-[VitePress](https://vitepress.dev) and published to GitHub Pages.
+[VitePress](https://vitepress.dev) and published to GitHub Pages at
+**[vpay-oss.vaam.store](https://vpay-oss.vaam.store)**.
 
 > **vpay is a scaffold. It cannot take a payment. Do not deploy it.** These
 > pages say so on every page that matters, because it is the most important
@@ -58,7 +59,7 @@ git clone https://github.com/vaam-apps/vpay ../vpay
 git -C ../vpay checkout "$(node -p 'require("./vpay.lock.json").vpay.tag')"
 git clone https://github.com/vaam-apps/vpay-skills ../vpay-skills
 pnpm install
-pnpm dev          # http://localhost:5173/vpay-docs/
+pnpm dev          # http://localhost:5173/
 pnpm verify       # the parity gate
 pnpm build        # what CI builds; needs ../vpay for the release notes
 ```

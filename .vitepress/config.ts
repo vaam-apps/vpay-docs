@@ -6,9 +6,12 @@ const lock: Lock = JSON.parse(
   readFileSync(new URL("../vpay.lock.json", import.meta.url), "utf8"),
 );
 
-// GitHub Pages serves a project site under /<repo>/. Override for a custom
-// domain or a local preview at the root.
-const base = process.env.DOCS_BASE ?? "/vpay-docs/";
+// The site is served at the root of its custom domain, vpay-oss.vaam.store,
+// set in the repository's Pages settings. A workflow-deployed Pages site needs
+// no CNAME file; GitHub ignores one. Set DOCS_BASE=/vpay-docs/ to preview the
+// github.io project path instead.
+const hostname = "https://vpay-oss.vaam.store";
+const base = process.env.DOCS_BASE ?? "/";
 
 export default defineConfig({
   srcDir: "docs",
@@ -18,6 +21,7 @@ export default defineConfig({
   description:
     "Human documentation for vpay, a payment orchestrator for Cameroon mobile money rails.",
   cleanUrls: true,
+  sitemap: { hostname },
   // The build fails on a link to a page that does not exist. Links into vpay
   // itself are checked by tools/verify-parity.mjs instead, against the tag.
   ignoreDeadLinks: false,
