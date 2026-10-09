@@ -253,7 +253,7 @@ merchant **access tokens** is separate and is rotated by a different procedure:
 [docs/runbooks/webhook-delivery-failures.md](vpay:docs/runbooks/webhook-delivery-failures.md)
 is the operator's side.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                         | Status                   | Evidence                                                                                                                         |
 | -------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |

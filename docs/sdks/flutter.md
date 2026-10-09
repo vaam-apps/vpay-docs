@@ -158,7 +158,7 @@ Apple's guidelines as read on 2026-09-13; it is not legal advice. See
 - **Chrome's first-run screen can intercept the checkout** on a device where
   Chrome has not finished onboarding.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                                 | Status                   | Evidence                                                                                                                                             |
 | -------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -186,4 +186,6 @@ from the next day. The full record is the Flutter table of
 - [ADR-0021: a Flutter checkout plugin](vpay:docs/adr/0021-flutter-checkout-plugin.md)
 - [docs/flows/mobile-checkout.md](vpay:docs/flows/mobile-checkout.md)
 - [Mobile checkout](/checkout/mobile) and [Hosted checkout](/checkout/hosted)
+- [Tauri checkout](/checkout/tauri) — the same payer surface for Tauri v2 apps,
+  with its own table in the parity matrix
 - Skills: [vpay-sdks](skill:vpay-sdks), [vpay-checkout](skill:vpay-checkout)

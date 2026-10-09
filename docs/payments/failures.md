@@ -6,6 +6,7 @@ description:
 status: partial
 sources:
   - docs/flows/failures.md
+  - docs/status/verification/2026-09-15.md
 skills:
   - vpay-payments
   - vpay-mtn-momo
@@ -118,15 +119,20 @@ A rising `provider_error` rate means an adapter's mapping table has drifted
 behind the rail's real error strings. Alert on it; do not tolerate it. The
 runbook is [provider-error-rate](vpay:docs/runbooks/provider-error-rate.md).
 
-## Status in v0.4.1
+## Status in this release
 
-| Part                                | Status                  | Evidence                                                                                                     |
-| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------ |
-| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                         |
-| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case |
-| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                      |
-| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs           |
-| Mappings faithful to the real rails | <Status s="unproven" /> | Every decline in the test record came from WireMock; the one real-rail call (MTN sandbox) was a success      |
+| Part                                | Status                  | Evidence                                                                                                                                                                               |
+| ----------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                                                                                                   |
+| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case                                                                           |
+| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                                                                                                |
+| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                     |
+| Mappings faithful to the real rails | <Status s="unproven" /> | No real rail has ever declined a vpay charge: every decline came from WireMock; MTN's sandbox was called on one day (2026-09-15) and produced no decline; Orange has never been called |
+
+MTN's one sandbox day was three runs: the first two stopped at the token mint
+on adapter bugs, and the third settled its charge — so it tested the success
+path, not any row of the tables above. The run is recorded in
+[vpay's verification log for 2026-09-15](vpay:docs/status/verification/2026-09-15.md).
 
 The full record is the **Status** section of
 [the failure taxonomy flow](vpay:docs/flows/failures.md#status).

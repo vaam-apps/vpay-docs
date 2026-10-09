@@ -147,7 +147,7 @@ Two different errors mean "this will not work", and the difference is the point:
   vpay has not written the call. Such a rail declares the capability `true`
   anyway and overrides the method with a named token, which
   `cargo xtask verify-status` requires to be listed in vpay's status page.
-  `orange_money::refund` is the one such token at v0.4.1.
+  `orange_money::refund` is the one such token in <Release />.
 
 A rail leaving that list says nothing about whether its written call has ever
 been made. `mtn_momo::refund` left it on 2026-09-15 when the Disbursements call
@@ -268,7 +268,7 @@ reconciler", the port leaked.
   `provider_error`, because it tells a merchant something false about whether to
   retry.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                             | Status                   | Evidence                                                                                                                          |
 | ------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |

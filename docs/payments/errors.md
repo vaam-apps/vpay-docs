@@ -8,6 +8,7 @@ status: built
 sources:
   - docs/flows/errors.md
   - docs/adr/0011-error-modelling.md
+  - docs/api/README.md
 skills:
   - vpay-conventions
   - vpay-merchant-api
@@ -149,17 +150,17 @@ prevent.
 | A handler hand-builds an envelope                  | the renderers are `pub(crate)` with one production caller                                      |
 | Two boundaries disagree on retry                   | impossible by construction — both read `Classify::retry`                                       |
 
-## Status in v0.4.1
+## Status in this release
 
-| Part                                     | Status                 | Evidence                                                                                                       |
-| ---------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `Category`, `Classify`, the policy table | <Status s="built" />   | Invariant tests over every category, plus a literal transcription of the table                                 |
-| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `401`, `403`, `404`, `409`, `502`, `503` through it                           |
-| `JobError::decision` in the worker       | <Status s="built" />   | Consumed by `vpay_worker::run_loop`                                                                            |
-| Exit codes from the category             | <Status s="built" />   | Both binaries exit with `Category::exit_code()`                                                                |
-| `verify-errors` gate                     | <Status s="built" />   | In `just verify` and CI                                                                                        |
-| Rail-produced codes against real rails   | <Status s="partial" /> | `charge_declined` and `502` have only ever come from WireMock hosts                                            |
-| `501` for an unbuilt rail operation      | <Status s="built" />   | A refund against an `orange_money` charge — `orange_money::refund` is the one remaining `NotImplemented` token |
+| Part                                     | Status                 | Evidence                                                                                                                                          |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Category`, `Classify`, the policy table | <Status s="built" />   | Invariant tests over every category, plus a literal transcription of the table                                                                    |
+| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `401`, `403`, `404`, `409`, `502`, `503` through it                                                              |
+| `JobError::decision` in the worker       | <Status s="built" />   | Consumed by `vpay_worker::run_loop`                                                                                                               |
+| Exit codes from the category             | <Status s="built" />   | Both binaries exit with `Category::exit_code()`                                                                                                   |
+| `verify-errors` gate                     | <Status s="built" />   | In `just verify` and CI                                                                                                                           |
+| Rail-produced codes against real rails   | <Status s="partial" /> | `charge_declined` and `502` have only ever come from WireMock hosts                                                                               |
+| `501` for an unbuilt rail operation      | <Status s="built" />   | `POST /v1/refunds` against an `orange_money` charge, and no other `/v1` call — `orange_money::refund` is the one remaining `NotImplemented` token |
 
 The full record is the **Status** section of
 [the errors flow](vpay:docs/flows/errors.md#status).

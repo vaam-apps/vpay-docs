@@ -1,15 +1,16 @@
 ---
 title: Mobile checkout
 description:
-  What the vpay_checkout_flutter plugin does in v0.4.1 — a native checkout
-  sheet, a browser hand-off for redirect rails, an outcome polled from the API —
-  and exactly how far each platform has been proven.
+  What the vpay_checkout_flutter plugin does — a native checkout sheet, a
+  browser hand-off for redirect rails, an outcome polled from the API — and
+  exactly how far each platform has been proven.
 status: partial
 sources:
   - docs/flows/mobile-checkout.md
   - docs/adr/0021-flutter-checkout-plugin.md
   - docs/status/mobile-flutter-plugin.md
   - sdks/flutter/vpay_checkout_flutter
+  - docs/flows/tauri-checkout.md
 skills:
   - vpay-sdks
   - vpay-checkout
@@ -19,13 +20,21 @@ skills:
 
 `vpay_checkout_flutter` is a Flutter plugin that lets a merchant's app take a
 mobile-money payment from a payer without the app ever holding a merchant
-credential. In v0.4.1 it renders the checkout as a **native Flutter sheet** over
+credential. In <Release /> it renders the checkout as a **native Flutter sheet** over
 the merchant's app, hands off to the payer's own browser only when a rail needs
 the payer on the rail's own site (Orange Money), and reports a typed result that
 it reads **from vpay's API, never from a URL**. It is a payer surface — like
 [browser checkout](/checkout/browser) — not a merchant SDK.
 
 Agents working on this should load [vpay-sdks](skill:vpay-sdks).
+
+::: tip Building with Tauri v2 instead?
+`tauri-plugin-vpay-checkout` is the same payer surface for Tauri v2 apps on
+Android, iOS, desktop and the plain web. It inherits this plugin's decisions
+unchanged — publishable key only, the outcome polled and never read off a URL,
+no WebView — but it has no native sheet: it always opens vpay's hosted page in
+the payer's own browser. See [Tauri checkout](/checkout/tauri).
+:::
 
 ::: warning Not published, not in CI
 The plugin is consumed by `path:` dependency — its README says "not published
@@ -200,7 +209,7 @@ on 2026-09-13, not legal advice — the
   hand-edited to redact the session URL; `dart run pigeon` silently reverts
   them, and only the Dart copy has a test that notices.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                             | Status                   | Evidence                                                                                                                                                |
 | ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -227,4 +236,6 @@ The full, dated record is
 - [The plugin's status page](vpay:docs/status/mobile-flutter-plugin.md)
 - [Hosted and embedded checkout](/checkout/hosted) — the page the redirect leg
   lands on; [Flutter SDK](/sdks/flutter)
+- [Tauri checkout](/checkout/tauri) — the same payer surface for Tauri v2
+  ([ADR-0023](vpay:docs/adr/0023-tauri-checkout-plugin.md))
 - Skills: [vpay-sdks](skill:vpay-sdks), [vpay-checkout](skill:vpay-checkout)

@@ -231,7 +231,7 @@ deployment has no supported way to supply them yet. See
   safe to change. Nothing described in its Status section enforces this; plan
   such changes for when no charge is in flight.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                | Status                   | Evidence                                                                 |
 | --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------ |

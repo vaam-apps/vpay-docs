@@ -193,7 +193,7 @@ The update takes the row's lock before merging `metadata`, so two concurrent
 updates produce two events describing the two committed states, never one
 describing a merge that was lost. See [Webhooks](/api/webhooks).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                     | Status                   | Evidence                                                                                          |
 | ---------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |

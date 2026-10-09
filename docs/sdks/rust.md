@@ -220,7 +220,7 @@ no money moves. [Demo runbook](/operate/runbooks#demo).
 - **Not proven: TLS.** Nothing in the repository serves TLS, so certificate
   verification against the vendored roots is exercised by no test.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                        | Status                   | Evidence                                                   |
 | ------------------------------------------- | ------------------------ | ---------------------------------------------------------- |
