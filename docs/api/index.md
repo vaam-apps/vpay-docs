@@ -1,14 +1,15 @@
 ---
 title: Merchant API
 description:
-  What vpay serves on /v1 at v0.4.1, how its surfaces differ, and the rules
-  every call follows — Idempotency-Key, errors, and what a refund's 201 does not
-  mean.
+  What vpay serves on /v1 in this release, how its surfaces differ, and the
+  rules every call follows — Idempotency-Key, errors, and what a refund's 201
+  does not mean.
 status: partial
 sources:
   - docs/api/README.md
   - README.md
   - docs/flows/merchant-auth/resource-contract.md
+  - docs/status/backend.md
   - docs/rfc/0003-refunds-destinations-and-the-first-ledger-postings.md
 skills:
   - vpay-merchant-api
@@ -161,7 +162,8 @@ category table is on [Errors](/payments/errors).
 
 This is stricter than Stripe, where the header is optional. A `POST` without one
 is a `400` naming `idempotency_key`, before anything is created. Keys are 1–255
-printable-ASCII bytes, scoped to your merchant, and kept for 24 hours. Both vpay
+printable-ASCII bytes, scoped to your merchant, and kept for 24 hours; the
+worker's hourly `sweep_expired` job deletes expired ones. Both vpay
 SDKs, and stripe-node, send one on every `POST` automatically, so in practice
 this only bites a hand-rolled client.
 
@@ -223,7 +225,8 @@ instructed the rail. It does **not** mean money moved:
   Disbursements credential exists in the project and that product has never been
   called — it is WireMock-proven only;
 - `orange_money::refund` is a declared `NotImplemented` token, which fails the
-  refund, releases its reservation and answers `501`.
+  refund, releases its reservation and answers `501` `not_implemented` — the
+  only place on `/v1` a caller can receive that code.
 
 `destination[<payment_method_type>][msisdn]` is required on both rails (a
 mobile-money refund is an outbound transfer and needs a payee), and
@@ -237,7 +240,7 @@ It answers the honest `404` from the nest's fallback, to an authenticated
 caller, because there is no ledger read path — a `200` would mean somebody
 invented a resource. Both SDKs can call it and get that `404`.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                        | Status                   | Evidence                                                                                        |
 | ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------- |

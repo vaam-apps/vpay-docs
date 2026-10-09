@@ -223,7 +223,7 @@ the flag is read.
   rest of the window — deliberately high enough that a person mistyping a
   printed one-time password twice is not locked out of their first login.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                   | Evidence                                                                                                                                     |
 | ------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |

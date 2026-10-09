@@ -226,7 +226,7 @@ confirm with Orange Cameroun" list:
   credential, what amount rules. This is what unblocks `orange_money::refund`.
 - The 401 → re-mint → retry path; only the token endpoint's own 401 is tested.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                                | Status                   | Evidence                                                                              |
 | ------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |

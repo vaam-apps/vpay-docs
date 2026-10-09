@@ -1,9 +1,9 @@
 ---
 title: Architecture decisions
 description:
-  Every architecture decision record in vpay v0.4.1, one plain sentence each,
-  grouped by theme, with the ones that are superseded, proposed or not yet built
-  marked as such.
+  Every architecture decision record in this vpay release, one plain sentence
+  each, grouped by theme, with the ones that are superseded, proposed or not yet
+  built marked as such.
 status: partial
 sources:
   - docs/adr/0001-record-architecture-decisions.md
@@ -28,6 +28,7 @@ sources:
   - docs/adr/0020-privacy-controls-and-evidence.md
   - docs/adr/0021-flutter-checkout-plugin.md
   - docs/adr/0022-surface-isolation-and-independent-scaling.md
+  - docs/adr/0023-tauri-checkout-plugin.md
   - docs/flows/README.md
   - AGENTS.md
 skills:
@@ -42,7 +43,7 @@ vpay records every architecturally significant choice as a numbered
 [`docs/adr/`](vpay:docs/adr/0001-record-architecture-decisions.md). An ADR
 records a decision that has been _taken_. It describes neither the process that
 follows from it (that is a flow document) nor the code that implements it (that
-is a reference page). v0.4.1 carries 22 ADRs, 0001 to 0022. This page gives each
+is a reference page). <Release /> carries 23 ADRs, 0001 to 0023. This page gives each
 one a single sentence. Read the ADR itself for the context, the alternatives
 that were rejected and the consequences.
 
@@ -56,17 +57,17 @@ and 0008 carry addenda of that kind; 0010 and 0011 carry amendments.
 
 ```mermaid
 flowchart LR
-    ADR["22 ADRs<br/>at v0.4.1"] --> A["Architecture<br/>0002, 0003, 0012, 0022"]
+    ADR["23 ADRs"] --> A["Architecture<br/>0002, 0003, 0012, 0022"]
     ADR --> S["Security and auth<br/>0005, 0009, 0010, 0017,<br/>0018, 0019, 0020"]
     ADR --> O["Operations and build<br/>0004, 0013, 0014"]
-    ADR --> F["Frontend and SDKs<br/>0008, 0015, 0021"]
+    ADR --> F["Frontend and SDKs<br/>0008, 0015, 0021, 0023"]
     ADR --> E["Engineering standards<br/>0001, 0006, 0007, 0011, 0016"]
 ```
 
 ## How the decisions relate
 
 Several ADRs refine earlier ones. This is how the chain of supersession and
-extension looks at v0.4.1:
+extension looks at <Release />:
 
 ```mermaid
 flowchart LR
@@ -79,6 +80,7 @@ flowchart LR
     A2["0002 provider port"] -->|"narrowed, interim"| A12["0012 rail config keys"]
     A11["0011 error modelling"] -->|"restated in"| A16["0016 six standards"]
     A8 -->|"extended by, proposed"| A22["0022 surface isolation"]
+    A21["0021 Flutter checkout plugin"] -->|"extended by, proposed"| A23["0023 Tauri checkout plugin"]
 ```
 
 ## Architecture
@@ -117,6 +119,7 @@ flowchart LR
 | [0008](vpay:docs/adr/0008-dashboard-scope.md): The dashboard observes            | Accepted, **writes not built** | The dashboard acts on records and never on configuration, and never holds a merchant secret. An addendum records that the per-record writes it describes are designed but unbuilt, and that `/dash/v1` is read-only |
 | [0015](vpay:docs/adr/0015-sdk-parity.md): Merchant SDKs are held to parity       | Accepted                       | `sdks/rust` and `sdks/nodejs` agree capability by capability, checked by machine. A capability lands in both in one PR, or it is recorded as a dated gap with an owner                                              |
 | [0021](vpay:docs/adr/0021-flutter-checkout-plugin.md): A Flutter checkout plugin | Accepted                       | `vpay_checkout_flutter` shows the hosted page in a native window and gets the outcome by polling `GET /v1/browser/payment_intents/{id}`. It never reads the outcome off a URL                                       |
+| [0023](vpay:docs/adr/0023-tauri-checkout-plugin.md): A Tauri v2 checkout plugin  | **Proposed**                   | `tauri-plugin-vpay-checkout` carries 0021's decisions over to Tauri v2 unchanged: one guest-JS state machine drives an Android, iOS, desktop and plain-browser host, and the outcome still comes only from the poll |
 
 ## Engineering standards
 
@@ -128,17 +131,18 @@ flowchart LR
 | [0011](vpay:docs/adr/0011-error-modelling.md): Error modelling                                  | Accepted, amended | Errors are typed at the leaves, composed per layer and classified once through `Classify`. `anyhow` appears only at a binary's edge                                    |
 | [0016](vpay:docs/adr/0016-engineering-standards.md): Six engineering standards                  | Accepted          | The six standards are errors, adapters, serde `snake_case`, SOLID/DRY, repositories as traits, and compiled doctests with externalised docs. Three are machine-checked |
 
-## Status in v0.4.1
+## Status in this release
 
 Most ADRs describe decisions that are in force. The ones below are where the
 decision and the code do not match yet, and the ADR says so itself:
 
-| Decision                          | Status                   | Evidence                                                                                             |
-| --------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| 0008: dashboard per-record writes | <Status s="not-built" /> | The 2026-09-20 addendum says `/dash/v1` mounts reads only, and the writes are designed but unbuilt   |
-| 0013: backups, PITR, retention    | <Status s="not-built" /> | The status is _Proposed_. No backup, restore or drill has ever happened                              |
-| 0022: surface isolation           | <Status s="partial" />   | The status is _Proposed_, pending maintainer acceptance, with three decisions deliberately left open |
-| 0012: rail config keys            | <Status s="partial" />   | An interim exception to 0002 until the port grows a `required_settings()`-style hook                 |
+| Decision                          | Status                   | Evidence                                                                                                                                                                                                  |
+| --------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0008: dashboard per-record writes | <Status s="not-built" /> | The 2026-09-20 addendum says `/dash/v1` mounts reads only, and the writes are designed but unbuilt                                                                                                        |
+| 0013: backups, PITR, retention    | <Status s="not-built" /> | The status is _Proposed_. No backup, restore or drill has ever happened                                                                                                                                   |
+| 0022: surface isolation           | <Status s="partial" />   | The status is _Proposed_, pending maintainer acceptance, with three decisions deliberately left open                                                                                                      |
+| 0023: Tauri checkout plugin       | <Status s="partial" />   | The status is _Proposed_: its seven decisions were taken by the implementing agent, and four questions are left to the maintainer. The plugin it describes exists — see [Tauri checkout](/checkout/tauri) |
+| 0012: rail config keys            | <Status s="partial" />   | An interim exception to 0002 until the port grows a `required_settings()`-style hook                                                                                                                      |
 
 Each ADR's own status line is authoritative. The directory is
 [`docs/adr/`](vpay:docs/adr/0001-record-architecture-decisions.md).

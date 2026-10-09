@@ -286,7 +286,7 @@ mean nothing to MTN's sandbox; against the real sandbox use `46733123454`.
 - **A rising `provider_error` share** — MTN sent a reason the table does not
   know; see [Runbooks](/operate/runbooks).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                    | Status                  | Evidence                                                                              |
 | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------- |

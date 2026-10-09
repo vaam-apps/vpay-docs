@@ -176,7 +176,7 @@ same key; and the `405`/`413` collapse.
 - delivery to a real endpoint: the receiver is WireMock too;
 - any `stripe` release other than `22.6.1`.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                               | Status                   | Evidence                                                                                                |
 | -------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |

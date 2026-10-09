@@ -113,7 +113,7 @@ sequenceDiagram
 The design also has a rung at `prompt_ttl_seconds` (default 900): mark
 `prompt_expired_at`, clear `next_action`, and emit `payment_intent.processing`
 with `expired: true` so a merchant's UI can stop saying "check your phone".
-**None of that exists at v0.4.1** — no column, no config key, no event. It was
+**None of that exists in <Release />** — no column, no config key, no event. It was
 deferred deliberately. Only the 24-hour rung runs.
 :::
 
@@ -121,22 +121,26 @@ deferred deliberately. Only the 24-hour rung runs.
 
 A rail's callback never changes state. `POST /provider/{code}/callback` extracts
 identifiers only (the adapter's `parse_callback` cannot return a status), looks
-the reference up, and enqueues the charge's poll or pulls it forward. The
+the reference up, and in one transaction enqueues the charge's poll (a no-op if
+it already exists) and pulls it forward. The
 authenticated status query is the only thing that moves money.
 
 The route answers `202` whether or not the reference names a charge — on
 purpose, so that an unauthenticated endpoint is not an oracle for "does this
 charge exist", and so that a rail does not retry forever against a reference it
-will never find. (vpay's flow document sketches the answer as `200 OK`; the
-route's own documentation in `vpay_api::provider_callback` says `202`, and this
-page follows the code.)
+will never find. Only two things get a different answer: a `{code}` that names
+no rail this process links is a `404`, identical to the router's own fallback,
+and a body that is not a notification the rail could have sent is a `400`.
 
 ```mermaid
 flowchart LR
-    CB["POST /provider/{code}/callback"] --> PC["parse_callback - identifiers only"]
+    CB["POST /provider/{code}/callback"] --> A{"an adapter for code?"}
+    A -->|"no"| NF["404, the router's fallback"]
+    A -->|"yes"| PC["parse_callback - identifiers only"]
+    PC -->|"not a notification this rail could send"| BR["400"]
     PC --> V{"reference names a charge?"}
     V -->|"no"| X["202, logged at info"]
-    V -->|"yes"| J["enqueue poll, ON CONFLICT DO NOTHING, or pull forward"]
+    V -->|"yes"| J["one transaction - enqueue poll ON CONFLICT DO NOTHING, then pull it forward"]
     J --> OK["202"]
     J -.->|"the worker later"| Q["authenticated status query settles it"]
 ```
@@ -215,7 +219,7 @@ each. Two rules from it are worth knowing before an incident:
   against the rail's statement
   ([unresolved-charges runbook](vpay:docs/runbooks/unresolved-charges.md)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                   | Evidence                                                                                        |
 | ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------- |

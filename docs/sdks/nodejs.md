@@ -10,7 +10,6 @@ sources:
   - examples/merchant-node
   - examples/merchant-stripe-node
   - docs/sdks/parity.md
-  - docs/status/gates.md
 skills:
   - vpay-sdks
   - vpay-merchant-api
@@ -35,18 +34,19 @@ Inside the vpay workspace it is a workspace package:
 pnpm --filter @vaam-apps/vpay-sdk build
 ```
 
-From npm:
+From the npm registry:
 
 ```bash
 pnpm add @vaam-apps/vpay-sdk
 ```
 
-::: info Is it on npm?
-The package's own README still says it is not yet published. That line is stale:
-vpay's gate log records that `release.yml` gained a `publish-node-sdk` job and
-that on 2026-09-20 `npm view @vaam-apps/vpay-sdk version` returned `0.3.0`
-([docs/status/gates.md](vpay:docs/status/gates.md)). The manifest at v0.4.1 is
-version `0.4.1`.
+::: info On npm since 2026-09-19
+`release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
+the first version on the registry was `0.2.1`, and the package's
+[README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
+2026-09-23. The manifest in <Release /> is version `0.5.0`. Being published
+proves nothing about what the server it talks to serves — see
+[What its tests talk to](#what-its-tests-talk-to).
 :::
 
 ## What the SDK does for you
@@ -257,8 +257,9 @@ right bytes" and "the SDK works against vpay".
   webhooks.
 - **Two live suites drive a real `vpay-server`**: `src/invoices.live.test.ts`
   and `src/refunds.live.test.ts`, run by `pnpm test:live` (a separate vitest
-  project) and brought up by `just sdk-live`. They fail rather than skip when no
-  stack answers. The rails behind that stack are WireMock.
+  project), brought up locally by `just sdk-live` and run by CI's `e2e` job
+  against the compose stack. They fail rather than skip when no stack answers.
+  The rails behind that stack are WireMock.
 - **`sdks/stripe-compat`** drives the official `stripe` package through this
   SDK's authenticator against a live compose stack, in CI's `e2e` job.
 - **`examples/merchant-node`** is written against a hypothetical
@@ -267,7 +268,7 @@ right bytes" and "the SDK works against vpay".
   `examples/checkout-browser/mint.mjs` through this SDK
   ([live sandbox test](/operate/runbooks#live-sandbox-test)).
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                                 | Status                   | Evidence                                                                    |
 | -------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |

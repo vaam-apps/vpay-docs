@@ -122,7 +122,7 @@ How these errors reach a merchant is in [errors](/payments/errors): `Negative`
 and `CurrencyMismatch` are the caller's problem (`400`), while an `i64`
 `Overflow` is classified as vpay's own bug.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                       | Status                 | Evidence                                                                                                                                   |
 | ------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |

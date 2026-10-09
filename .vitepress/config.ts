@@ -129,6 +129,7 @@ export default defineConfig({
             { text: "Hosted checkout", link: "/checkout/hosted" },
             { text: "Browser checkout", link: "/checkout/browser" },
             { text: "Mobile checkout", link: "/checkout/mobile" },
+            { text: "Tauri checkout", link: "/checkout/tauri" },
           ],
         },
         {

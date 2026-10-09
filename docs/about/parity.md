@@ -102,6 +102,14 @@ That is the work the next release will create. There are three new vpay pages to
 write, and 13 existing pages to re-read against the files that changed under
 them.
 
+It did. vpay **v0.5.0**, tagged on 2026-09-23, carried the Tauri plugin. Within
+seconds of the tag, `release-parity` opened
+[vpay-docs#1](https://github.com/vaam-apps/vpay-docs/pull/1) with the same three
+missing pages. It listed **31** stale pages rather than 13, because the release
+also carried vpay's own corrections to about twenty stale claims
+([vaam-apps/vpay#243](https://github.com/vaam-apps/vpay/pull/243)), and those
+changed files under pages the dry run never saw move.
+
 ## How a page declares what it covers
 
 Every page starts with frontmatter the check reads:

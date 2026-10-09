@@ -10,6 +10,7 @@ sources:
   - sdks/stripe-js
   - sdks/stripe-compat
   - docs/flows/stripe-sdk-compat.md
+  - docs/flows/browser-checkout.md
   - docs/sdks/parity.md
   - examples/checkout-browser
 skills:
@@ -40,6 +41,14 @@ and its loader hard-codes `js.stripe.com`. So this is vpay's own package,
 dependencies, ESM, TypeScript strict. It never holds a merchant key: it
 authenticates with a publishable key and the intent's `client_secret`, which
 your server obtained from a [merchant SDK](/sdks/).
+
+It has been on the npm registry since 2026-09-19 — `release.yml`'s
+`publish-stripe-js-sdk` job publishes it on every `v*` tag — and inside the vpay
+workspace it is a `workspace:*` dependency:
+
+```bash
+pnpm add @vaam-apps/vpay-stripe-js
+```
 
 ### Using it
 
@@ -117,6 +126,14 @@ navigates and the promise never settles, unless you pass
 of Stripe's `payment_intent` / `redirect_status` parameters — so the return page
 must carry its own state and call `retrievePaymentIntent`.
 
+The return trip itself is wired: vpay mounts `/provider/{code}/callback` and
+tells the rail a per-charge `return_url`. Under a Checkout Session that is
+vpay's own return page, and a real browser has walked the whole Orange round
+trip in `shop-hosted.cy.ts` — against Orange's WireMock stub, not Orange.
+Without a session, the payer lands on **your** `return_url`, and you learn the
+outcome from `retrievePaymentIntent`, never from the fact that they came back
+([Browser checkout](/checkout/browser)).
+
 ### Errors
 
 Nothing on the `Stripe` object rejects; every failure is
@@ -180,7 +197,7 @@ so a job with no stack never picks it up; CI runs it in the `e2e (compose)` job.
 - **Reading `stripe-should-retry: true`.** The suite observes only the `false`
   direction; the `true` direction cannot be staged without a test double.
 
-## Status in v0.4.1
+## Status in this release
 
 | Part                                                  | Status                  | Evidence                                                                                                                                  |
 | ----------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
