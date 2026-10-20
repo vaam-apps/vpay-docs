@@ -279,11 +279,11 @@ by hand: none of them is in `just ci` or `just verify`. See
 
 ## Status in this release
 
-| Part                        | Status                  | Evidence                                                                                                  |
-| --------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate  |
-| `just test-e2e`             | <Status s="built" />    | Green against the compose stack, and the MVP item for it is met. The rails are WireMock hosts             |
-| Running against a real rail | <Status s="unproven" /> | Only one MTN sandbox charge has ever run, from a separate `live` profile. The demo never leaves its stubs |
+| Part                        | Status                  | Evidence                                                                                                   |
+| --------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate   |
+| `just test-e2e`             | <Status s="built" />    | Green against the compose stack, and the MVP item for it is met. The rails are WireMock hosts              |
+| Running against a real rail | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded using a separate `live` profile. The demo never leaves its stubs |
 
 The full procedure, with a real run's output pasted in, is
 [`docs/runbooks/demo.md`](vpay:docs/runbooks/demo.md).

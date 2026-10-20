@@ -27,7 +27,7 @@ OAuth2 `client_credentials` + `private_key_jwt` (see
 
 Every route below is real — it answers with real rows from a real Postgres — but
 the rails behind the money-moving ones have only ever been WireMock stubs, apart
-from one MTN **sandbox** charge on 2026-09-15. Read [Status](/guide/status)
+from over seven successful MTN **sandbox** payments on 2026-09-15. Read [Status](/guide/status)
 before you build on anything here.
 
 Agents working on this surface should load
@@ -242,15 +242,15 @@ invented a resource. Both SDKs can call it and get that `404`.
 
 ## Status in this release
 
-| Part                                        | Status                   | Evidence                                                                                        |
-| ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------- |
-| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                   |
-| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; confirm reaches a rail that has only been a stub (one MTN sandbox charge) |
-| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                 |
-| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                |
-| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`               |
-| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                    |
-| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                           |
+| Part                                        | Status                   | Evidence                                                                                           |
+| ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                      |
+| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded; other rail evidence is stub-based |
+| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                    |
+| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                   |
+| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                  |
+| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                       |
+| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                              |
 
 The full record is [docs/api/README.md](vpay:docs/api/README.md) and
 [docs/status/backend.md](vpay:docs/status/backend.md).

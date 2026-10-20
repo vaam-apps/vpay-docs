@@ -206,16 +206,16 @@ A late success, at minute 40 or at hour 30, is normal. The intent stayed
 
 ## Status in this release
 
-| Concept                        | Status                  | Evidence                                                                                                                         |
-| ------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                   |
-| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                 |
-| Provider port and capabilities | <Status s="partial" />  | Both adapters pass the shared conformance suite, against WireMock containers                                                     |
-| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                          |
-| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                              |
-| Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Every rail behind them was a stub, apart from one MTN sandbox charge |
-| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                       |
-| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                  |
+| Concept                        | Status                  | Evidence                                                                                                                              |
+| ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                        |
+| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                      |
+| Provider port and capabilities | <Status s="partial" />  | Both adapters pass the shared conformance suite, against WireMock containers                                                          |
+| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                               |
+| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                                   |
+| Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Rail evidence is WireMock plus over seven successful MTN sandbox payments |
+| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                            |
+| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                       |
 
 Each concept's own page carries the full record. The index of vpay's flow
 documents is [`docs/flows/README.md`](vpay:docs/flows/README.md).

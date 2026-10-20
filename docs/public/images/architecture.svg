@@ -113,8 +113,8 @@
   <g>
     <rect x="936" y="520" width="232" height="190" rx="14" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
     <text x="954" y="550" font-size="15" font-weight="800" fill="#991b1b">Real-rail evidence</text>
-    <text x="954" y="578" class="l">• one MTN <tspan font-weight="700">sandbox</tspan> charge,</text>
-    <text x="966" y="596" class="l">2026-09-15</text>
+    <text x="954" y="578" class="l">• over seven MTN <tspan font-weight="700">sandbox</tspan></text>
+    <text x="966" y="596" class="l">payments, 2026-09-15</text>
     <text x="954" y="620" class="l">• Orange: never called</text>
     <text x="954" y="644" class="l">• no refund has ever settled</text>
     <text x="954" y="668" class="l">• no cluster has ever run it</text>

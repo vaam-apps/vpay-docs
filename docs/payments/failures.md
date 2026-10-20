@@ -129,9 +129,11 @@ runbook is [provider-error-rate](vpay:docs/runbooks/provider-error-rate.md).
 | Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                     |
 | Mappings faithful to the real rails | <Status s="unproven" /> | No real rail has ever declined a vpay charge: every decline came from WireMock; MTN's sandbox was called on one day (2026-09-15) and produced no decline; Orange has never been called |
 
-MTN's one sandbox day was three runs: the first two stopped at the token mint
-on adapter bugs, and the third settled its charge — so it tested the success
-path, not any row of the tables above. The run is recorded in
+The first documented sandbox session took three runs: the first two stopped at
+the token mint on adapter bugs, and the third settled its charge. Over seven
+payments succeeded across the 2026-09-15 testing; no charge decline was
+observed, so those successes did not test any row of the tables above. The
+initial session is recorded in
 [vpay's verification log for 2026-09-15](vpay:docs/status/verification/2026-09-15.md).
 
 The full record is the **Status** section of

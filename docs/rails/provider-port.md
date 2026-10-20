@@ -276,7 +276,7 @@ reconciler", the port leaked.
 | Shared conformance suite over both rails         | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                  |
 | Callback route as a hint                         | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit                                                                      |
 | Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                      |
-| MTN charge path over the port                    | <Status s="partial" />   | One sandbox payment settled on 2026-09-15                                                                                         |
+| MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                               |
 | Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                       |
 | `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange is `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read |
 | 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                            |

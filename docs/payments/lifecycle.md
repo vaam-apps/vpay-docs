@@ -181,9 +181,9 @@ the committed charge row, never from the adapter's in-memory answer.
 
 ::: warning Where these diagrams have actually run
 Both sequences run end to end in CI against WireMock hosts that answer the way
-vpay's documents say the rails answer. Against a real rail, only the push
-sequence has run, once, against MTN's **sandbox** with a test number that
-settles automatically. The redirect sequence has never met Orange, and no
+vpay's documents say the rails answer. Against a real rail, the push
+sequence produced over seven successful payments against MTN's **sandbox**,
+using a test number that settles automatically. The redirect sequence has never met Orange, and no
 webhook has ever reached a merchant endpoint outside the vpay repository.
 :::
 
@@ -223,15 +223,15 @@ rail: MTN can produce all eleven, Orange only three. See
 
 ## Status in this release
 
-| Part                                                              | Status                   | Evidence                                                                                            |
-| ----------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
-| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                              |
-| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                   |
-| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; MTN's charge path settled once against MTN's real **sandbox** (2026-09-15) |
-| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail               |
-| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                        |
-| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                        |
-| Partial `amount_received`                                         | <Status s="not-built" /> | Neither rail can collect part of an amount                                                          |
+| Part                                                              | Status                   | Evidence                                                                                             |
+| ----------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                               |
+| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                    |
+| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; over seven MTN payments succeeded against the real **sandbox** (2026-09-15) |
+| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail                |
+| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                         |
+| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                         |
+| Partial `amount_received`                                         | <Status s="not-built" /> | Neither rail can collect part of an amount                                                           |
 
 The full record is the **Status** section of
 [the payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md#status).

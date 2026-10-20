@@ -135,11 +135,11 @@ of it at <Release />:
 | Exercised against a running vpay                                                                                                         | ✅ refunds and invoices; ⛔ checkout sessions, customers, account holders | same as Rust                                                       |
 
 "Against a running vpay" means the SDK's live suites, which drive a real
-`vpay-server` over a socket — whose rails are still WireMock. Nothing any SDK
-has done is evidence about a real rail, with one exception: the single MTN
-**sandbox** payment of 2026-09-15 was minted by
-`examples/checkout-browser/mint.mjs` through the Node SDK and confirmed in the
-browser through `vpay-stripe-js`
+`vpay-server` over a socket — whose rails are still WireMock. The real-rail
+evidence comes from the MTN **sandbox** testing on 2026-09-15, when over seven
+payments succeeded. A documented sandbox run minted a payment with
+`examples/checkout-browser/mint.mjs` through the Node SDK and confirmed it in
+the browser through `vpay-stripe-js`
 ([live sandbox test](/operate/runbooks#live-sandbox-test)). The matrix also has
 its own tables for the browser client, the Flutter plugin and the Tauri plugin;
 see their pages.
@@ -160,7 +160,7 @@ in vpay, not a parity gap.
 | Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                   |
 | Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                        |
 | Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate |
-| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Once: the 2026-09-15 MTN sandbox payment was minted with the Node SDK and confirmed with `vpay-stripe-js` — no other rail, no production                        |
+| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js` — no other rail, no production         |
 
 See [docs/status.md](vpay:docs/status.md) for the repository-wide picture and
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md#gap-ledger) for every open gap.

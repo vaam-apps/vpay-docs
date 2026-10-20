@@ -31,15 +31,18 @@ It compiles, lints clean and its tests pass, **but it cannot take a payment. Do
 not deploy it.**
 :::
 
-## The one real rail call
+## Real MTN sandbox evidence {#the-one-real-rail-call}
 
-Until 2026-09-15 the load-bearing sentence was "no HTTP call to a real rail has
-ever been made". On that day one EUR `mtn_momo` PaymentIntent was created,
-confirmed and settled against **MTN's real sandbox**. The worker's authenticated
-status query reported the charge paid, and the intent reached `succeeded`.
+Over seven EUR `mtn_momo` payments succeeded against **MTN's real sandbox**
+during testing on 2026-09-15. The first recorded intent,
+`pi_xxd2xj1e914e16c6m63gezag`, reached `succeeded` after the worker's
+authenticated status query reported its charge paid.
 
-The sentence that replaced it is narrower, and it still decides what you can
-trust:
+The maintainer who performed the tests confirmed the corrected count on
+2026-10-20. This corrects the historical testing evidence summarized here; it
+does not describe a new test run or change the release pinned by these pages.
+
+The limits remain:
 
 > No real payer, no production rail, and no rail other than MTN's sandbox have
 > ever been touched.
@@ -63,7 +66,7 @@ flowchart TD
     Q --> C["Orange Money<br/>(every call)"]
     Q --> D["Rail callback<br/>POST /provider/{code}/callback"]
     Q --> E["Webhook to a merchant"]
-    A --> A1["Yes, once: MTN sandbox, 2026-09-15,<br/>test MSISDN, no money moved"]
+    A --> A1["Over seven successful MTN sandbox payments,<br/>2026-09-15; test MSISDN, no money moved"]
     B --> B1["No: written, WireMock-proven,<br/>product never called"]
     C --> C1["No: WireMock only"]
     D --> D1["No: WireMock only"]
@@ -133,9 +136,10 @@ pie showData
 | 7   | `/dash/v1` login end to end: issue a token, verify it, rotate a signing key       | <Status s="partial" />  | Staff sign-in works against a real Postgres. Key rotation is restart-based and has never been observed on a deployment                                             |
 | 8   | A hosted payment page, in an iframe version and a fully hosted version            | <Status s="partial" />  | Both pages are built and driven by a real browser, but they are not ready for production. Stub rails, and no browser has been observed enforcing `frame-ancestors` |
 
-One fact keeps items 2, 3, 4, 5 and 8 open: every rail and every webhook
-receiver in the project's history has been a stub. The single MTN sandbox charge
-does not change that. It was one charge, to a test number, with no money moved.
+Items 2, 3, 4, 5 and 8 remain open: beyond the MTN sandbox testing, the rail
+evidence is still stub-based, and every webhook receiver has been a stub. Over
+seven successful sandbox payments to a test number do not prove these broader
+conditions; no money moved.
 
 ## The `NotImplemented` declaration
 
@@ -165,12 +169,12 @@ must never invent one.
 
 ## Status in this release
 
-| Part                          | Status                   | Evidence                                                                     |
-| ----------------------------- | ------------------------ | ---------------------------------------------------------------------------- |
-| Taking a real payment         | <Status s="not-built" /> | The banner in `docs/status.md`: vpay cannot take a payment                   |
-| End to end against stub rails | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green |
-| MTN sandbox charge            | <Status s="partial" />   | One intent, `pi_xxd2xj1e914e16c6m63gezag`, reached `succeeded` on 2026-09-15 |
-| Declared unimplemented paths  | <Status s="partial" />   | One token, `orange_money::refund`, gate-checked in both directions           |
+| Part                          | Status                   | Evidence                                                                              |
+| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| Taking a real payment         | <Status s="not-built" /> | The banner in `docs/status.md`: vpay cannot take a payment                            |
+| End to end against stub rails | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green          |
+| MTN sandbox charge            | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above |
+| Declared unimplemented paths  | <Status s="partial" />   | One token, `orange_money::refund`, gate-checked in both directions                    |
 
 The full record is in [`docs/status.md`](vpay:docs/status.md). Its history,
 verbatim and dated, is in [`docs/status/`](vpay:docs/status/README.md).

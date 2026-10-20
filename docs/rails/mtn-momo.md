@@ -2,8 +2,8 @@
 title: MTN MoMo
 description:
   How vpay's MTN Mobile Money adapter takes a push payment, mints and caches
-  tokens, maps MTN's failure reasons, and what exactly the one real sandbox
-  payment of 2026-09-15 did and did not prove.
+  tokens, maps MTN's failure reasons, and what over seven successful real
+  sandbox payments on 2026-09-15 did and did not prove.
 status: partial
 sources:
   - docs/flows/adapter-mtn-momo.md
@@ -21,8 +21,8 @@ skills:
 MTN Mobile Money Cameroon is vpay's **push** rail: vpay asks MTN to prompt the
 payer's handset, the payer approves with their PIN, and vpay learns the outcome
 by asking MTN — never by trusting a notification. It is the only rail vpay has
-ever called for real, and only on one day: on 2026-09-15, against MTN's
-**sandbox**, where one payment settled. Everything else on this page — refunds,
+ever called for real: over seven payments succeeded against MTN's **sandbox**
+during testing on 2026-09-15. Everything else on this page — refunds,
 the decline vocabulary, production — is proven against WireMock stubs or not at
 all.
 
@@ -192,8 +192,8 @@ parses the body's `code` before deciding anything and never blind-retries a 500.
 Every mapped row is driven against a real WireMock container by
 `a_declined_charge_maps_to_the_documented_failure_code`. That proves the
 mapping, not the rail: MTN types the field but does not promise which values its
-Cameroon deployment will ever send, and the one real payment succeeded, so **no
-decline has ever been observed from MTN**.
+Cameroon deployment will ever send. Over seven sandbox payments succeeded,
+but **no charge decline has ever been observed from MTN**.
 
 ## Refunds via Disbursements
 
@@ -235,18 +235,21 @@ the member is `payee`; that a `202` really is empty and carries no fee; that
 API user across both products. MTN's portal publishes no OpenAPI schema for the
 Disbursement API, so the adapter reuses the Collections failure table.
 
-## The sandbox run of 2026-09-15
+## The sandbox testing of 2026-09-15 {#the-sandbox-run-of-2026-09-15}
 
-This is the only time vpay has called a real rail.
+Over seven payments succeeded during this testing. The maintainer who ran the
+tests confirmed that historical count on 2026-10-20; this is an evidence
+correction, not a new test run or a change to the pinned release.
 
-**What happened.** Using the `live` profile (`deployment.livemode: false`, on
-`localhost`), a EUR `mtn_momo` PaymentIntent (`pi_xxd2xj1e914e16c6m63gezag`) was
+**The first recorded payment.** Using the `live` profile
+(`deployment.livemode: false`, on `localhost`), a EUR `mtn_momo` PaymentIntent (`pi_xxd2xj1e914e16c6m63gezag`) was
 created, confirmed with MTN's stock sandbox test MSISDN `46733123454`, and
 reached `succeeded` about a minute later, when the worker's
-`GET /collection/v1_0/requesttopay/{ref}` observed the settlement. It took three
-runs: the first two found the two halves of the token-grant bug above (no body,
+`GET /collection/v1_0/requesttopay/{ref}` observed the settlement. That
+documented session took three runs: the first two found the two halves of the token-grant bug above (no body,
 then the wrong spelling), which the WireMock suite could not see because its
-stub accepted what the adapter sent; the third settled.
+stub accepted what the adapter sent; the third settled. Those three attempts
+are not the total number of payments tested that day.
 
 | Proven against MTN's real sandbox                    | Not proven                                                                                      |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -291,7 +294,7 @@ mean nothing to MTN's sandbox; against the real sandbox use `46733123454`.
 | Part                                    | Status                  | Evidence                                                                              |
 | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
 | Collections token mint                  | <Status s="partial" />  | Called against MTN's real sandbox on 2026-09-15                                       |
-| `submit` / `query_status` (push charge) | <Status s="partial" />  | One sandbox payment settled 2026-09-15; WireMock conformance otherwise                |
+| `submit` / `query_status` (push charge) | <Status s="partial" />  | Over seven sandbox payments succeeded 2026-09-15; WireMock conformance otherwise      |
 | `parse_callback` and the callback route | <Status s="unproven" /> | Built; only vpay's own tests have ever called it                                      |
 | Failure mapping                         | <Status s="unproven" /> | Every row driven against WireMock; no MTN decline ever observed                       |
 | `refund` (Disbursements `transfer`)     | <Status s="unproven" /> | Written and WireMock-proven; never called; no real credential; refunds stay `pending` |
