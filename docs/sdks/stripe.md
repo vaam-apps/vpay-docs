@@ -199,15 +199,15 @@ so a job with no stack never picks it up; CI runs it in the `e2e (compose)` job.
 
 ## Status in this release
 
-| Part                                                  | Status                  | Evidence                                                                                                                                  |
-| ----------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `vpay-stripe-js` payment-intent half                  | <Status s="built" />    | Unit-tested against a `node:http` stub; Cypress drives `examples/checkout-browser` to `succeeded` on the compose stack (observed locally) |
-| `vpay-stripe-js` embedded checkout                    | <Status s="partial" />  | jsdom and stub suites; a Cypress spec completes a payment inside the embedded page                                                        |
-| `vpay-stripe-js` popup                                | <Status s="unproven" /> | Stub windows only; never driven by a real browser (dated ⛔)                                                                              |
-| `vpay-stripe-js` package suite against a running vpay | <Status s="unproven" /> | Its own suite is stub-only (dated ⛔)                                                                                                     |
-| One real-rail payment                                 | <Status s="partial" />  | The 2026-09-15 MTN **sandbox** payment was confirmed through `examples/checkout-browser`, which uses this package                         |
-| `sdks/stripe-compat` against a real stack             | <Status s="built" />    | Runs in CI's `e2e (compose)` job; rails and receiver are WireMock                                                                         |
-| `stripe-should-retry: true`, `stripe.events.list()`   | <Status s="unproven" /> | Not observed / untested, per the flow's Status section                                                                                    |
+| Part                                                  | Status                  | Evidence                                                                                                                                                               |
+| ----------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vpay-stripe-js` payment-intent half                  | <Status s="built" />    | Unit-tested against a `node:http` stub; Cypress drives `examples/checkout-browser` to `succeeded` on the compose stack (observed locally)                              |
+| `vpay-stripe-js` embedded checkout                    | <Status s="partial" />  | jsdom and stub suites; a Cypress spec completes a payment inside the embedded page                                                                                     |
+| `vpay-stripe-js` popup                                | <Status s="unproven" /> | Stub windows only; never driven by a real browser (dated ⛔)                                                                                                           |
+| `vpay-stripe-js` package suite against a running vpay | <Status s="unproven" /> | Its own suite is stub-only (dated ⛔)                                                                                                                                  |
+| Real sandbox payment evidence                         | <Status s="partial" />  | Over seven MTN **sandbox** payments succeeded on 2026-09-15; a documented sandbox run confirmed a payment through `examples/checkout-browser`, which uses this package |
+| `sdks/stripe-compat` against a real stack             | <Status s="built" />    | Runs in CI's `e2e (compose)` job; rails and receiver are WireMock                                                                                                      |
+| `stripe-should-retry: true`, `stripe.events.list()`   | <Status s="unproven" /> | Not observed / untested, per the flow's Status section                                                                                                                 |
 
 The full record: the browser table of
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md), the package

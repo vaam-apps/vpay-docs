@@ -26,9 +26,9 @@ them defines the architecture.
 
 ::: danger vpay has never taken a real payment
 At <Release /> vpay is a **scaffold**. It compiles, lints clean and its tests pass,
-but it cannot take a payment. **Do not deploy it.** Every payment in its history
-has settled against a WireMock stub, with one exception: a single MTN
-**sandbox** charge on 2026-09-15. See [What works today](/guide/status).
+but it cannot take a payment. **Do not deploy it.** Apart from over seven successful MTN
+**sandbox** payments on 2026-09-15, its payment evidence comes from WireMock
+stubs. See [What works today](/guide/status).
 :::
 
 ![System overview: a merchant, the vpay-server serve and worker modes, Postgres, the two rails, the checkout page, the dashboard and outbound webhooks](/images/architecture.svg){.diagram}
@@ -209,7 +209,7 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 | Part                                  | Status                   | Evidence                                                                                       |
 | ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
 | End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container |
-| MTN MoMo charge path                  | <Status s="partial" />   | One EUR sandbox charge settled on 2026-09-15. The payer was a test number, and no money moved  |
+| MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved   |
 | Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                          |
 | Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything       |
 | A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. No cluster has ever run vpay                   |

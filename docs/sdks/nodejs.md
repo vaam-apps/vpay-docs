@@ -264,7 +264,8 @@ right bytes" and "the SDK works against vpay".
   SDK's authenticator against a live compose stack, in CI's `e2e` job.
 - **`examples/merchant-node`** is written against a hypothetical
   `api.vpay.example` and is not run against a stack by anything.
-- **One real-rail run:** on 2026-09-15 the MTN sandbox payment was minted by
+- **Real sandbox evidence:** over seven MTN sandbox payments succeeded on
+  2026-09-15. A documented sandbox run minted a payment with
   `examples/checkout-browser/mint.mjs` through this SDK
   ([live sandbox test](/operate/runbooks#live-sandbox-test)).
 

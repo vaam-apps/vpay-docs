@@ -62,9 +62,9 @@ features:
 
 ::: danger vpay is a scaffold. Do not deploy it.
 It compiles, lints clean and its tests pass, but **it cannot take a payment**.
-One real-rail call has ever happened: a single charge settled against **MTN's
-sandbox** on 2026-09-15, using a test number the sandbox settles by itself. No
-real payer has been prompted, no money has moved, Orange has never been called,
+Over seven payments settled against **MTN's real sandbox** on 2026-09-15,
+using a test number the sandbox settles by itself. No real payer has been
+prompted, no money has moved, Orange has never been called,
 no refund has ever settled, and no cluster has ever run vpay. [What works today
 →](/guide/status)
 :::

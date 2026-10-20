@@ -129,7 +129,7 @@ and `CurrencyMismatch` are the caller's problem (`400`), while an `i64`
 | Integer minor units, float ban             | <Status s="built" />   | `float_arithmetic = "deny"` in the workspace lints                                                                                         |
 | `to_provider_string` / `to_provider_minor` | <Status s="built" />   | `xaf_renders_the_same_digits_in_both_encodings`, `eur_pads_the_fractional_part`, and Orange's `the_amount_is_a_json_number_in_minor_units` |
 | The three `Money` invariants               | <Status s="built" />   | Tests in `vpay-core::money`                                                                                                                |
-| EUR on a real rail                         | <Status s="partial" /> | One MTN **sandbox** charge in EUR; XAF has never reached a real rail                                                                       |
+| EUR on a real rail                         | <Status s="partial" /> | Over seven successful MTN **sandbox** payments in EUR; XAF has never reached a real rail                                                   |
 
 The full record is [the money flow](vpay:docs/flows/money.md).
 

@@ -142,8 +142,9 @@ sequenceDiagram
   `void` and `mark_uncollectible` are `409`. Cancel the intent to get them back.
   Partial payments are out of scope, enforced by the database.
 
-Paying an invoice is exactly as proven as the rails are: apart from one MTN
-sandbox charge, every rail call vpay has made went to a WireMock stub.
+Paying an invoice is exactly as proven as the rails are: apart from the MTN
+sandbox testing, where over seven payments succeeded, every rail call vpay has
+made went to a WireMock stub.
 
 ## Refunds against a paid invoice
 
