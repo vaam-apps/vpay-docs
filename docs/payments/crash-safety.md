@@ -8,6 +8,7 @@ sources:
   - docs/flows/crash-safety.md
   - docs/reference/vpay-worker.md
   - docs/adr/0026-the-database-clock-schedules-jobs.md
+  - docs/flows/adapter-notchpay.md
 skills:
   - vpay-reconciler
   - vpay-payments
@@ -78,10 +79,18 @@ computes `now() + grace`
 host whose clock runs behind or ahead of the database neither eats into nor
 stretches the grace. No ordering and no kill point changed with it.
 
-[Notch Pay](/rails/notchpay), the other push rail, is addressed the same way: by
-a reference vpay generated, the charge's own UUID. A duplicate submit answers
-`409`, which its adapter treats as the crash-retry case and reads the payment
-rather than failing it.
+[Notch Pay](/rails/notchpay), the other push rail, creates the payment with the
+charge's own UUID, but since v0.9.1 it processes and reads it by **Notch Pay's**
+`trx.…` reference, because its sandbox answered `404` to anything else. That
+reference comes back only in the first call's answer and is kept as key
+material once `submit` returns. A duplicate submit answers `409`, which the
+adapter treats as the crash-retry case when the charge already holds Notch
+Pay's reference: it reads the payment rather than failing it. When the charge
+holds none, a crash fell between the first call and `submit` returning, and
+vpay cannot find the payment: the `409` is `Malformed`, the charge's fate is
+left unknown for an operator, and only Notch Pay's dashboard can tell whether
+the payer paid. That window is open, and Notch Pay offers no way to close it
+([the adapter flow](vpay:docs/flows/adapter-notchpay.md)).
 
 ### The retry rule
 

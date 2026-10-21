@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.9.0`. Being published
+2026-09-23. The manifest in <Release /> is version `0.9.1`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
@@ -132,7 +132,7 @@ send the payer to ([Payment lifecycle](/payments/lifecycle)). The client also
 exposes `refunds`, `events.list`, `checkout.sessions`, `customers`, `invoices`,
 `invoiceItems`, `accountHolders` and `balance`; the package README covers each.
 `PaymentMethodType` is `"mtn_momo" | "orange_money" | "notchpay"` since
-<Release />.
+v0.9.0.
 
 Two additions from vpay 0.6.0 are worth knowing:
 
@@ -189,8 +189,15 @@ Every error extends `VpayError`. Branch on the subclass, then on `code`:
 Two idempotency errors share status `400` and type `idempotency_error` and mean
 opposite things: `idempotency_key_in_flight` (wait and resend the same call) and
 `idempotency_key_in_use` (the key was used with a different body — a bug). One
-exception to the `VpayError` rule: an out-of-range amount throws a bare
-`TypeError` (a dated gap). See [Errors](/payments/errors).
+exception to the `VpayError` rule: a parameter the SDK refuses to send throws a
+bare `TypeError` (a dated gap). That is an out-of-range amount and, since
+v0.9.1, an empty or all-dots `id` on any of the twenty-one methods that put one
+in the path: `""`, `.`, `..` or a longer run of dots is refused before any
+request, the token request included, with one fixed message that never quotes
+the id. Those ids used to be sent, and `fetch`'s URL parser resolved them before
+the request left, so `customers.del("..")` was a `DELETE /v1/`. No signature
+changed, but a caller catching `VpayApiError` for those inputs now gets the
+`TypeError`. See [Errors](/payments/errors).
 
 ## Webhook verification
 
@@ -280,9 +287,9 @@ right bytes" and "the SDK works against vpay".
   SDK's authenticator against a live compose stack, in CI's `e2e` job.
 - **`examples/merchant-node`** is written against a hypothetical
   `api.vpay.example` and is not run against a stack by anything. Since
-  <Release /> its rail, number, amount and order come from environment
-  variables, so vpay's Notch Pay sandbox runbook can use it for its first
-  test-mode payment; that runbook is written and has not been run.
+  v0.9.0 its rail, number, amount and order come from environment variables,
+  so vpay's Notch Pay sandbox runbook can use it for its first test-mode
+  payment through vpay; that part of the runbook (Part B) has not been run.
 - **Real sandbox evidence:** over seven MTN sandbox payments succeeded on
   2026-09-15. A documented sandbox run minted a payment with
   `examples/checkout-browser/mint.mjs` through this SDK
@@ -297,6 +304,7 @@ right bytes" and "the SDK works against vpay".
 | Refunds and invoices against a running vpay                          | <Status s="partial" />   | Live suites green against WireMock rails; no refund ever settles            |
 | Checkout sessions, customers, account holders against a running vpay | <Status s="unproven" />  | Stub-only (dated ⛔ rows)                                                   |
 | Stripe authenticator                                                 | <Status s="built" />     | Unit-tested and exercised end to end by `sdks/stripe-compat`                |
+| An empty or all-dots path `id` refused before any request (v0.9.1)   | <Status s="built" />     | Four ✅ rows in the matrix's "Request validation"; a `TypeError` (dated ⛔) |
 | Retries, `request-id`, `stripe-should-retry`, `events.retrieve`      | <Status s="not-built" /> | Dated ⛔ rows in the parity matrix                                          |
 
 The full record is the Node column of

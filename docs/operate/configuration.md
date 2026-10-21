@@ -86,7 +86,7 @@ stubs). `application-sandbox.yml` is the CLI's default profile.
 `application-live.yml` is a _prod-shaped local_ overlay: it still has
 `livemode: false`, but points `mtn_momo` at MTN's real sandbox — it is what the
 [live sandbox runbook](/operate/runbooks#live-sandbox-test) runs.
-`application-notchpay-sandbox.yml`, new in <Release />, does the same for
+`application-notchpay-sandbox.yml`, new in v0.9.0, does the same for
 `notchpay` and Notch Pay's real sandbox, with `notchpay` as its only rail; it is
 what the [Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)
 runs, and nobody has run it against Notch Pay yet. None of the four is a
