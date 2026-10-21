@@ -53,8 +53,11 @@ Concretely:
 
 - The payer number was an MTN-sandbox test MSISDN that the sandbox settles by
   itself. No handset was prompted and **no money moved**.
-- **Orange's redirect rail has never been called**, and neither has
-  [Notch Pay](/rails/notchpay), the rail added in <Release />.
+- **Orange's redirect rail has never been called**, and the adapter for
+  [Notch Pay](/rails/notchpay), the rail added in v0.9.0, has never called
+  Notch Pay. On 2026-10-21 Notch Pay's sandbox answered a probe, not the
+  adapter, and contradicted the adapter's addressing; v0.9.1 fixed it, and the
+  fix has not met Notch Pay.
 - **No webhook has ever reached a merchant endpoint** outside the repository.
 - **No rail has ever refunded anything.** MTN's Disbursements product, which is
   what an MTN refund is, has never been called. `orange_money::refund` is
@@ -73,7 +76,7 @@ flowchart TD
     A --> A1["Over seven successful MTN sandbox payments,<br/>2026-09-15; test MSISDN, no money moved"]
     B --> B1["No: written, WireMock-proven,<br/>product never called"]
     C --> C1["No: WireMock only"]
-    N --> N1["No: WireMock only"]
+    N --> N1["No: WireMock only;<br/>its sandbox answered a probe, 2026-10-21"]
     D --> D1["No: WireMock only"]
     E --> E1["No: receivers on the compose network only"]
 ```
@@ -91,7 +94,7 @@ broke.
 | **Adapter**: `mtn_momo` charge                             | <Status s="partial" />  | Wire calls proven against WireMock. Since 2026-09-15 the charge path is also proven against MTN's real sandbox                                                                                                                                                                                                                    | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
 | **Adapter**: `mtn_momo` refund                             | <Status s="unproven" /> | The Disbursements `transfer` call is written and WireMock-proven. It has never been called, and no real Disbursements credential exists in the project                                                                                                                                                                            | [status.md](vpay:docs/status.md)                                                                                                                       |
 | **Adapter**: `orange_money`                                | <Status s="unproven" /> | Wire calls proven against WireMock. Never called                                                                                                                                                                                                                                                                                  | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
-| **Adapter**: `notchpay`                                    | <Status s="unproven" /> | New in <Release />, admitted under ADR-0031. Proven only against a WireMock stub transcribed from Notch Pay's documentation. Never called, and every boot logs its public-key exposure                                                                                                                                            | [status/providers.md](vpay:docs/status/providers.md)                                                                                                   |
+| **Adapter**: `notchpay`                                    | <Status s="unproven" /> | New in v0.9.0, admitted under ADR-0031. Proven only against a WireMock stub, reshaped in v0.9.1 to answer as Notch Pay's sandbox answered a probe on 2026-10-21. The adapter has never called Notch Pay, and every boot logs its public-key exposure                                                                              | [status/providers.md](vpay:docs/status/providers.md)                                                                                                   |
 | **Frontend**: checkout page, dashboard, demo shop          | <Status s="partial" />  | Built, and walked by a real browser against a stub rail                                                                                                                                                                                                                                                                           | [status/frontend.md](vpay:docs/status/frontend.md)                                                                                                     |
 | **Infrastructure**: images, compose, Helm, migrations      | <Status s="partial" />  | Boots in compose and in CI. **No pod has ever run**                                                                                                                                                                                                                                                                               | [status/infrastructure.md](vpay:docs/status/infrastructure.md)                                                                                         |
 | **Data layer**: sqlx, CrateStack, the schema               | <Status s="partial" />  | `schemas/vpay.cstack` compiles into `vpay-db`. The drift between migrations and models is counted but not closed                                                                                                                                                                                                                  | [status/cratestack.md](vpay:docs/status/cratestack.md)                                                                                                 |

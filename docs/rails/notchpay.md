@@ -3,8 +3,8 @@ title: Notch Pay
 description:
   How vpay's Notch Pay adapter collects MTN MoMo and Orange Money through one
   aggregator account, why it was admitted only after ADR-0031 amended the rules,
-  the production risk that admission accepts, and why nothing has ever called
-  Notch Pay.
+  the production risk that admission accepts, what Notch Pay's sandbox answered,
+  and why the adapter has still never called Notch Pay.
 status: unproven
 sources:
   - docs/flows/adapter-notchpay.md
@@ -21,21 +21,29 @@ skills:
 
 Notch Pay is an **aggregator**: one merchant account collects MTN MoMo and
 Orange Money in Cameroon through its `cm.mobile` channel. In vpay it is the
-`notchpay` rail, added in <Release />. It is a **push** rail, like MTN: the
-payer is prompted on their own handset, the charge is addressed on Notch Pay by
-a reference vpay generated, and only the authenticated status read moves money.
+`notchpay` rail, added in v0.9.0. It is a **push** rail, like MTN: the
+payer is prompted on their own handset, the payment is addressed on Notch Pay
+by **Notch Pay's own reference** (`trx.…`), and only the authenticated status
+read moves money.
 
 The adapter is `backends/crates/vpay-adapter-notchpay`, on a separate client
-crate, `backends/crates/vpay-notchpay`. Every call, status and error it uses is
-transcribed from Notch Pay's documentation and its `openapi.yaml` 2.1.0.
+crate, `backends/crates/vpay-notchpay`. Its calls were transcribed from Notch
+Pay's documentation and its `openapi.yaml` 2.1.0, then corrected on 2026-10-21
+from what Notch Pay's sandbox answered.
 
-::: danger Nothing has called Notch Pay
-Not the sandbox, and not production. The adapter is proven only against a
-WireMock stub that vpay transcribed from the same pages as the adapter. A
-sandbox runbook and a probe exist, and neither has been run against Notch Pay
-yet. `notchpay::refund` is `ProviderError::NotImplemented`. The rail is not
-wired into any running stack: `config/application.yml` carries its block
-**commented out**.
+::: danger The adapter has never called Notch Pay
+Not the sandbox, and not production. On 2026-10-21 Notch Pay's real sandbox
+answered RFC-0012's sandbox questions (delivery step 1) through
+`vpay-notchpay`'s probe, **not through the adapter**
+([verification](vpay:docs/status/verification/2026-10-21-notchpay-sandbox-run.md)).
+It contradicted the adapter's addressing: process and read take Notch Pay's
+`trx.…` reference, and vpay's own reference is a `404`. The adapter was fixed
+the same day, in v0.9.1, and that fix has not met Notch Pay either: only
+step 5, the first test-mode call through the adapter, can show it. The adapter
+is proven against a WireMock stub, reshaped to answer as the sandbox did.
+`notchpay::refund` is `ProviderError::NotImplemented`. The rail is not wired
+into any running stack: `config/application.yml` carries its block **commented
+out**.
 :::
 
 Agents working on this adapter should load [vpay-notchpay](skill:vpay-notchpay).
@@ -67,9 +75,10 @@ in its own words rather than "rule 3 passes".
 Whoever holds a merchant's Notch Pay **public key** can, on that merchant's
 account and without vpay ever learning of it, read any payment, initialize a
 payment, send a USSD prompt in the merchant's name to **any** phone number, and
-cancel any pending payment, including one of vpay's. vpay records such a
-cancelled charge as `provider_error`, never `payer_declined`, because the
-cancel may not have been the payer's.
+cancel any pending payment, including one of vpay's. Since v0.9.1 a
+`canceled` read is `payer_declined` (see [status mapping](#status-mapping)), so
+such a cancel arrives as a payer's decline: the read is evidence of a decline,
+not proof of whose.
 
 vpay keeps the key server-side and never hands it to a browser or an app. That
 is all it can do. Notch Pay's own documentation calls public keys safe to put
@@ -95,53 +104,80 @@ sequenceDiagram
     autonumber
     participant API as vpay-api
     participant A as notchpay adapter
-    participant N as Notch Pay (from its documentation)
+    participant N as Notch Pay (its documentation and sandbox)
     participant P as Payer handset
     participant W as vpay worker
-    Note over A,N: Every Notch Pay call below is WireMock-only. Notch Pay has never been called.
+    Note over A,N: The adapter has made these calls only against WireMock. Notch Pay's sandbox answered them to a probe on 2026-10-21.
     API->>A: submit(charge, config)
     A->>N: POST /payments (amount, XAF, phone, reference = charge UUID)
-    N-->>A: 201 pending
-    A->>N: POST /payments/{reference} (channel cm.mobile, phone)
+    N-->>A: 201 pending, reference trx.…, trxref = charge UUID
+    A->>N: POST /payments/{trx.…} (channel cm.mobile, phone)
     N->>P: USSD prompt
     N-->>A: 202
-    A-->>API: Submitted (no redirect, no key material)
+    A-->>API: Submitted (no redirect, key material notchpay_reference = trx.…)
     opt webhook (a hint only, unverified)
         N->>API: POST /provider/notchpay/callback
         API-->>N: poll pulled forward
     end
     W->>A: query_status(charge, config)
-    A->>N: GET /payments/{reference}
-    N-->>A: pending, complete, failed, expired, …
+    A->>N: GET /payments/{trx.…}
+    N-->>A: pending, complete, failed, expired, canceled, …
     A-->>W: ChargeStatus
 ```
 
 Every call carries `Authorization: <public_key>`, `X-Grant: <private_key>` and
 the configured request deadline, and the client follows no redirect. The
 submit is two calls: `POST /payments` creates the payment with vpay's own
-reference, and `POST /payments/{reference}` is the one that prompts the payer.
-A `409` on the first (the reference already exists) is the crash-retry case:
-the adapter reads the payment and carries on from what it finds.
+reference, and `POST /payments/{notchpay_reference}` is the one that prompts the
+payer, where `notchpay_reference` is the `trx.…` the first call returned. The
+adapter keeps it in the charge's `ref_extra` as key material. A first answer
+with no Notch Pay reference, or one whose `trxref` is not this charge's, is
+`Malformed`, and nothing is sent to the payer.
 
-The read is addressed by **vpay's** reference, which is what the specification
-shows. Whether the live API also wants Notch Pay's own `trx.…` reference is on
-the "to confirm" list.
+The read is `GET /payments/{notchpay_reference}`, and its answer must name the
+charge's own reference as `trxref`, or it is `Malformed`. A charge holding no
+`notchpay_reference` is `Config` before any request: that is key material vpay
+lost, never `NotFound`.
+
+Until 2026-10-21 every call was addressed by vpay's own reference, as Notch
+Pay's specification shows. The sandbox answered `404` "Payment Not Found" to
+every process and read by it and accepted only its own `trx.…`.
+
+**The crash window this leaves.** Notch Pay's reference exists only in the
+first call's answer, and is durable only once `submit` returns. The sandbox's
+`GET /payments?search=` did not find a payment by vpay's reference, so a crash
+between the first call and `submit` returning leaves a payment vpay cannot
+read. A `409` on the retry (the reference already exists) is read by the
+`notchpay_reference` the charge holds when it holds one; when it holds none, it
+is `Malformed`: the charge's fate is left unknown for an operator, never
+`Submitted` and never a decline. Before the prompt, the payment simply expires;
+after it, only Notch Pay's dashboard shows whether the payer paid.
 
 ## Status mapping
 
-| Notch Pay status                            | vpay `ChargeStatus`                                                                      |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `pending`, `processing`, `incomplete`       | `Pending`. `incomplete` (paid less than asked) is never a success                        |
-| `complete`, `refunded`, `partialy-refunded` | `Succeeded`, **only if** the amount and currency are the charge's; else `Malformed`      |
-| `failed`, `canceled`, `rejected`            | `Failed(provider_error)`                                                                 |
-| `expired`, `abandoned`                      | `Failed(payer_timeout)`                                                                  |
-| any other status, or none                   | `Malformed`                                                                              |
-| `404` "Payment not found"                   | `NotFound`, which is never on its own a failure ([crash safety](/payments/crash-safety)) |
+| Notch Pay status                            | vpay `ChargeStatus`                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pending`, `processing`, `incomplete`       | `Pending`. `incomplete` (paid less than asked) is never a success                                  |
+| `complete`, `refunded`, `partialy-refunded` | `Succeeded`, **only if** `amount`, `amounts.total` and currency are the charge's; else `Malformed` |
+| `canceled`                                  | `Failed(payer_declined)`                                                                           |
+| `failed`, `rejected`                        | `Failed(provider_error)`                                                                           |
+| `expired`, `abandoned`                      | `Failed(payer_timeout)`                                                                            |
+| any other status, or none                   | `Malformed`                                                                                        |
+| `404` "Payment not found"                   | `NotFound`, which is never on its own a failure ([crash safety](/payments/crash-safety))           |
 
-The read names no failure reason in Notch Pay's specification, so this rail
-produces only `payer_timeout`, `provider_error` and `provider_account_blocked`.
-A payer with no funds and a payer who never answered both read `failed`. See
+The read names no failure reason. On 2026-10-21 the sandbox's outcome numbers
+read `complete` (MTN and Orange success), `failed` (other failure), `expired`
+(timeout) and `canceled` (canceled by user), with no reason field. So this rail
+produces `payer_timeout`, `payer_declined`, `provider_error` and
+`provider_account_blocked`, never `insufficient_funds`. See
 [failures](/payments/failures).
+
+**The "insufficient funds" number read `complete`, for less than was asked**
+(`amount` 107, `amounts.total` 105). Comparing `amount` alone would have made
+it a success. A success now needs `amounts.total` to be the charge's too, and
+a read with no `amounts` is `Malformed`. A success with no `id` records Notch
+Pay's `trx.…` reference as the provider transaction id, since the sandbox's
+answers carried no `id`.
 
 ## Configuration
 
@@ -165,7 +201,7 @@ Boot refuses a block that lacks either key, names a channel other than
 production from one host, **the livemode rule is on the keys**: in livemode a
 key containing `test.` or `test_` refuses to boot, and outside livemode a key
 with neither does. The real test-mode keys carry `test.`, which vpay measured
-and corrected for in <Release />. The error names the key and never prints it.
+and corrected for in v0.9.0. The error names the key and never prints it.
 
 The keys are the merchant's own Notch Pay account's. Provider credentials are
 configured once per rail, so until vpay can hold an account per merchant
@@ -188,22 +224,27 @@ refund in writing. Account-holder lookup is `Unsupported`.
 
 ## Status in this release
 
-| Part                                       | Status                   | Evidence                                                                                   |
-| ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------ |
-| Submit and status read                     | <Status s="unproven" />  | The shared conformance suite's `notchpay` row passes against WireMock; never called        |
-| Callback parsing                           | <Status s="unproven" />  | Parsed in conformance; never received from Notch Pay                                       |
-| Boot rules and the exposure warning        | <Status s="built" />     | Tested in process, and by running the real binary on a Notch Pay fixture configuration     |
-| Webhook signature verification             | <Status s="not-built" /> | Designed in RFC-0014, a draft                                                              |
-| `refund`                                   | <Status s="not-built" /> | `NotImplemented("notchpay::refund")`                                                       |
-| `cm.mtn` and `cm.orange` channels          | <Status s="not-built" /> | Wait for the payer's chosen method type to reach the adapter (ADR-0029 D6)                 |
-| Sandbox session and first test-mode call   | <Status s="not-built" /> | [The runbook](/operate/runbooks#test-notch-pay-against-its-sandbox) is written and not run |
-| Wired into the compose, demo or e2e stacks | <Status s="not-built" /> | The block in `config/application.yml` is commented out                                     |
+| Part                                       | Status                   | Evidence                                                                                                                                               |
+| ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Submit and status read                     | <Status s="unproven" />  | The shared conformance suite's `notchpay` row passes against a WireMock stub shaped like the sandbox's answers; the adapter has never called Notch Pay |
+| Callback parsing                           | <Status s="unproven" />  | Parsed in conformance; never received from Notch Pay                                                                                                   |
+| Addressing by Notch Pay's `trx.…`          | <Status s="unproven" />  | Fixed in v0.9.1 on the sandbox's evidence; never met Notch Pay. A crash between initialize and `submit` returning leaves a payment vpay cannot read    |
+| Boot rules and the exposure warning        | <Status s="built" />     | Tested in process, and by running the real binary on a Notch Pay fixture configuration                                                                 |
+| Webhook signature verification             | <Status s="not-built" /> | Designed in RFC-0014, a draft                                                                                                                          |
+| `refund`                                   | <Status s="not-built" /> | `NotImplemented("notchpay::refund")`                                                                                                                   |
+| `cm.mtn` and `cm.orange` channels          | <Status s="not-built" /> | Wait for the payer's chosen method type to reach the adapter (ADR-0029 D6)                                                                             |
+| Sandbox session (step 1)                   | <Status s="partial" />   | Run on 2026-10-21 through the probe, not the adapter; webhook signing not measured                                                                     |
+| First test-mode call through the adapter   | <Status s="not-built" /> | Step 5 of [the runbook](/operate/runbooks#test-notch-pay-against-its-sandbox); not run                                                                 |
+| Wired into the compose, demo or e2e stacks | <Status s="not-built" /> | The block in `config/application.yml` is commented out                                                                                                 |
 
 ## Go deeper
 
 - [Adapter: Notch Pay](vpay:docs/flows/adapter-notchpay.md): the calls, the
-  production risks, and the ten "to confirm" items that decide whether the
-  adapter is right
+  production risks, and the "to confirm" items that decide whether the adapter
+  is right, each marked with what the sandbox answered
+- [The 2026-10-21 sandbox run](vpay:docs/status/verification/2026-10-21-notchpay-sandbox-run.md)
+  and [the addressing fix](vpay:docs/status/verification/2026-10-21-notchpay-trx-reference.md):
+  vpay's dated verification pages
 - [ADR-0031](vpay:docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md):
   the amended admission rule and its six conditions
 - [Providers](vpay:docs/status/providers.md): vpay's matrix of every rail it

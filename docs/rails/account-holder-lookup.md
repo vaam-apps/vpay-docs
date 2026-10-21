@@ -67,7 +67,7 @@ sequenceDiagram
 
 The MTN call uses the **same Collections subscription key and token** as a
 charge, so a deployment that can take MTN payments needs no new credential for
-it. The number is percent-encoded into its path segment, and since <Release />
+it. The number is percent-encoded into its path segment, and since v0.9.0
 an empty or all-dots number is refused as `ProviderError::Malformed` before any
 request, the token fetch included. `/v1` admits only digits, so no route reaches
 that refusal; it guards the port.

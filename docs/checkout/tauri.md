@@ -35,7 +35,7 @@ state machine, several hosts. It is a payer surface, like the
 Agents working on this should load [vpay-sdks](skill:vpay-sdks).
 
 ::: warning New, not published, mostly ungated
-The plugin landed on 2026-09-22 and is new in <Release />. Neither half is on a
+The plugin landed on 2026-09-22 and was first released in v0.5.0. Neither half is on a
 registry — `pnpm add @vaam-apps/vpay-tauri-checkout` 404s, and the crate is
 `publish = false` — so you consume it from a checkout of the vpay repository.
 Only its TypeScript half is in CI; **no gate compiles the Rust, the Kotlin or
