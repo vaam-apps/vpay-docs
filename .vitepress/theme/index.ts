@@ -1,6 +1,6 @@
 // The vaam-apps house theme (Material 3), extended with vpay's own pieces:
-// the status strip above every page, the provenance box below it, and the
-// components pages use from Markdown.
+// the status strip above every page, the provenance box below it, the
+// components pages use from Markdown, and the home page's hero illustration.
 import Md3Theme from "@vaam-apps/vitepress-md3";
 import type { Theme } from "vitepress";
 import { h } from "vue";
@@ -10,6 +10,7 @@ import PageStatus from "./components/PageStatus.vue";
 import Status from "./components/Status.vue";
 import SkillTable from "./components/SkillTable.vue";
 import Release from "./components/Release.vue";
+import VpayHeroArt from "./components/VpayHeroArt.vue";
 import "./custom.css";
 
 export default {
@@ -19,6 +20,9 @@ export default {
     h(Md3Theme.Layout!, null, {
       "doc-before": () => h(PageStatus),
       "doc-footer-before": () => h(PageProvenance),
+      // Replaces the theme's default hero art (the hero image on Expressive
+      // shapes) with vpay's own, drawn inline so it follows light and dark.
+      "home-hero-image": () => h(VpayHeroArt),
     }),
   enhanceApp({ app }) {
     app.component("Mermaid", Mermaid);

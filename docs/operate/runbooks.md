@@ -35,8 +35,8 @@ index a human reads first — one section per runbook, the gist in a few lines,
 and a link to the real procedure, which is where the SQL and the commands are.
 
 ::: warning Most of these have never been followed against a deployment
-No deployment of vpay exists, so no `kubectl` or `helm` command in any runbook
-has been run against a cluster. The evidence that does exist is narrower and is
+vpay is being tested on some clusters (the owner's statement, 2026-10-21), but
+no `kubectl` or `helm` command in any runbook is on record as run against one. The evidence that does exist is narrower and is
 named in each section below: SQL executed against a scratch Postgres, states
 produced by integration tests, and three procedures (the demo, the checkout
 integration and the MTN sandbox test) that have genuinely been run end to end on

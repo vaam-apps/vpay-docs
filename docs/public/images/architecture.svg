@@ -117,8 +117,8 @@
     <text x="966" y="596" class="l">payments, 2026-09-15</text>
     <text x="954" y="620" class="l">• Orange: never called</text>
     <text x="954" y="644" class="l">• no refund has ever settled</text>
-    <text x="954" y="668" class="l">• no cluster has ever run it</text>
-    <text x="954" y="694" font-size="12.5" font-weight="700" fill="#991b1b">Do not deploy it.</text>
+    <text x="954" y="668" class="l">• no cluster run on record</text>
+    <text x="954" y="694" font-size="12.5" font-weight="700" fill="#991b1b">In live testing, not GA.</text>
   </g>
 
   <!-- ===== edges ===== -->

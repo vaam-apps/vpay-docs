@@ -29,10 +29,11 @@ export default defineMd3Config({
   // The build fails on a link to a page that does not exist. Links into vpay
   // itself are checked by tools/verify-parity.mjs instead, against the tag.
   ignoreDeadLinks: false,
+  // The favicon is the logo with a heavier glyph, drawn to read at 16px.
   head: [
     [
       "link",
-      { rel: "icon", type: "image/svg+xml", href: `${base}images/logo.svg` },
+      { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` },
     ],
   ],
 
@@ -193,7 +194,7 @@ export default defineMd3Config({
     search: { provider: "local" },
     outline: [2, 3],
     footer: {
-      message: `Verified against vpay ${lock.vpay.tag} (${lock.vpay.tagDate}). vpay is a scaffold — do not deploy it.`,
+      message: `Verified against vpay ${lock.vpay.tag} (${lock.vpay.tagDate}). vpay is in live testing, not generally available.`,
       copyright: "vaam-apps",
     },
   },
