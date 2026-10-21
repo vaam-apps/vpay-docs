@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { defineConfig } from "vitepress";
+import { defineMd3Config } from "@vaam-apps/vitepress-md3/config";
 import { vpayMarkdown, type Lock } from "./markdown";
 
 const lock: Lock = JSON.parse(
@@ -9,11 +9,15 @@ const lock: Lock = JSON.parse(
 // The site is served at the root of its custom domain, vpay-oss.vaam.store,
 // set in the repository's Pages settings. A workflow-deployed Pages site needs
 // no CNAME file; GitHub ignores one. Set DOCS_BASE=/vpay-docs/ to preview the
-// github.io project path instead.
+// github.io project path instead. `||`, not `??`: an empty DOCS_BASE means
+// the default, never a base of "".
 const hostname = "https://vpay-oss.vaam.store";
-const base = process.env.DOCS_BASE ?? "/";
+const base = process.env.DOCS_BASE || "/";
 
-export default defineConfig({
+// The vaam-apps house theme, Material 3 (@vaam-apps/vitepress-md3). Every
+// colour on the site is generated from `themeConfig.md3`, in light and dark;
+// .vitepress/theme/custom.css uses those tokens rather than colours of its own.
+export default defineMd3Config({
   srcDir: "docs",
   base,
   lang: "en",
@@ -41,6 +45,13 @@ export default defineConfig({
   vite: { build: { chunkSizeWarningLimit: 2500 } },
 
   themeConfig: {
+    md3: {
+      style: "expressive",
+      // vpay's deep teal for the chrome, with its amber kept as the tertiary
+      // accent: the scheme picks the tones, so both stay readable in each mode.
+      seed: "#0f766e",
+      palettes: { tertiary: "#f59e0b" },
+    },
     logo: "/images/logo.svg",
     // Exposed to the theme so every page can say what it was verified against.
     // @ts-expect-error — custom key, read by PageProvenance.vue
