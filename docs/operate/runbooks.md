@@ -326,7 +326,8 @@ first time, with a Notch Pay test-mode account.
 
 - **Part A** is a probe, `cargo build -p vpay-notchpay --example sandbox_probe`,
   that asks Notch Pay's sandbox the open questions and writes a redacted report.
-  It runs in phases: a read-only one first, then payments, then webhooks.
+  It runs in phases: a read-only one first, then payments, then webhooks, and
+  a read-only `search` phase that looks a payment up by reference.
 - **Part B** runs vpay itself with `--profile notchpay-sandbox` (still
   `livemode: false`) and takes one sandbox payment that succeeds and one that
   fails through the adapter.
@@ -337,9 +338,14 @@ first time, with a Notch Pay test-mode account.
   so a TLS-intercepting proxy stops every call. The probe alone accepts an extra
   CA bundle, for a Claude Code cloud session only; vpay itself never does.
 
-_Evidence:_ **written on 2026-10-20 and never run against Notch Pay.** Its
-probe was run against the repository's WireMock stub, and Part B was booted up
-to its health checks against a local Postgres with fixture keys.
+_Evidence:_ written on 2026-10-20. **Part A ran against Notch Pay's sandbox on
+2026-10-21**, from a cloud session with the probe's cloud-only `--ca-bundle`, on
+the maintainer's approval
+([verification](vpay:docs/status/verification/2026-10-21-notchpay-sandbox-run.md)).
+Its answers corrected the adapter (see [Notch Pay](/rails/notchpay)); the
+webhook signature was not measured. **Part B, the first payment through vpay
+itself, has not been run against Notch Pay**: it was booted up to its health
+checks against a local Postgres with fixture keys.
 [docs/runbooks/notchpay-sandbox-test.md](vpay:docs/runbooks/notchpay-sandbox-test.md)
 · background: [Notch Pay](/rails/notchpay)
 
@@ -351,7 +357,7 @@ to its health checks against a local Postgres with fixture keys.
 | Worker queue, webhook failures, migrations, restore | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment        |
 | Deploy/rollback, both rotations, release            | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster |
 | Unresolved charges, provider error rate             | <Status s="unproven" /> | Alerts never evaluated; thresholds proposed                                          |
-| Notch Pay sandbox test                              | <Status s="unproven" /> | Written; never run against Notch Pay                                                 |
+| Notch Pay sandbox test                              | <Status s="partial" />  | Part A (the probe) run against the sandbox on 2026-10-21; Part B never run           |
 
 The authoritative account of what each page has and has not been exercised
 against is [docs/runbooks/README.md](vpay:docs/runbooks/README.md).

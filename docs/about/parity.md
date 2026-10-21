@@ -60,7 +60,7 @@ The fast path is a `vpay-release` dispatch from vpay's own
 tag lands. It merged on 2026-09-23
 ([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)), and this
 repository's `release-parity` runs show a `vpay-release` dispatch arriving on
-each vpay tag date from v0.5.0 to v0.9.0. The 3-hourly poll stays as the
+each vpay tag date from v0.5.0 to v0.9.1. The 3-hourly poll stays as the
 fallback.
 
 ## What the check refuses
@@ -122,7 +122,9 @@ it under `previous`, so the stale list named only what changed in the last
 release, while the pages had last been re-read against v0.5.0. The re-read that signed the lock
 off against v0.9.0 therefore covered everything that changed from v0.5.0 to
 v0.9.0, not only from v0.8.0, and added the pages those four releases made
-necessary: [Notch Pay](/rails/notchpay) and eight architecture decisions.
+necessary: [Notch Pay](/rails/notchpay) and eight architecture decisions. The
+v0.9.1 PR was merged unsigned too; it moved `previous` to v0.9.0, which had been
+signed, so its re-read covered only what v0.9.1 changed.
 
 ## How a page declares what it covers
 

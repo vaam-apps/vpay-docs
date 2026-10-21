@@ -122,7 +122,7 @@ match confirmed.status {
 ```
 
 Two things the types do for you. `ConfirmPaymentIntentParams` has one variant
-per rail — `mtn_momo(msisdn)` and, since <Release />, `notchpay(msisdn)` for the
+per rail — `mtn_momo(msisdn)` and, since v0.9.0, `notchpay(msisdn)` for the
 push rails, `orange_money(return_url)` for the redirect rail — so they cannot be
 mixed up. And there is no `failed`
 status: a rail refusal returns the intent to `RequiresPaymentMethod` with
@@ -157,15 +157,24 @@ Two types, deliberately. `ConfigError` comes from building a client or reading a
 key — nothing has reached the wire. `Error` is everything that happens on, or
 instead of, the wire:
 
-| Variant                     | When                                                                    |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `Error::Api`                | A non-2xx `/v1` envelope — `status`, `kind`, `code`, `message`, `param` |
-| `Error::TokenEndpoint`      | The token endpoint refused. Never retried                               |
-| `Error::UnexpectedResponse` | Not the envelope — a proxy's HTML 502, an undecodable success           |
-| `Error::Transport`          | DNS, TLS, timeout, refused connection                                   |
-| `Error::InvalidParams`      | An amount negative or past 2^53-1; nothing sent                         |
-| `Error::Config`             | A `ConfigError` surfaced through a request path                         |
-| `Error::Webhook`            | `webhooks::verify` rejected a delivery                                  |
+| Variant                     | When                                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Error::Api`                | A non-2xx `/v1` envelope — `status`, `kind`, `code`, `message`, `param`                                   |
+| `Error::TokenEndpoint`      | The token endpoint refused. Never retried                                                                 |
+| `Error::UnexpectedResponse` | Not the envelope — a proxy's HTML 502, an undecodable success                                             |
+| `Error::Transport`          | DNS, TLS, timeout, refused connection                                                                     |
+| `Error::InvalidParams`      | An amount negative or past 2^53-1, or (since v0.9.1) a path `id` that is empty or only dots; nothing sent |
+| `Error::Config`             | A `ConfigError` surfaced through a request path                                                           |
+| `Error::Webhook`            | `webhooks::verify` rejected a delivery                                                                    |
+
+The id refusal is a behaviour change in v0.9.1 with no signature change: every
+method that puts an `id` in the path (`retrieve`, `update`, `del`, `confirm`,
+`cancel`, `expire`, `finalize`, `void`, `mark_uncollectible`, `pay`) returns
+`Error::InvalidParams { param: "id", .. }` for `""`, `.`, `..` or a longer run of
+dots, without minting a token, with one fixed message that never quotes the id.
+Those ids used to be sent, and the URL parser resolved them before the request
+left, so `customers().del("..")` was a `DELETE /v1/`. A caller matching on
+`Error::Api { status: 404, .. }` for those inputs now gets `InvalidParams`.
 
 Branch on `code`, not on `kind`: `idempotency_key_in_flight` means wait and
 resend the same call; `idempotency_key_in_use` means the key was reused with a
@@ -239,15 +248,16 @@ no money moves. [Demo runbook](/operate/runbooks#demo).
 
 ## Status in this release
 
-| Part                                        | Status                   | Evidence                                                   |
-| ------------------------------------------- | ------------------------ | ---------------------------------------------------------- |
-| Handshake, token cache, single re-auth      | <Status s="built" />     | Parity ✅ rows; real-verifier conformance test             |
-| `/v1` resource methods                      | <Status s="built" />     | Every method's wire shape pinned; byte-identical to Node   |
-| Refunds and invoices against a running vpay | <Status s="partial" />   | Live suites against WireMock rails; no refund ever settles |
-| `token_type` validation, timeout test       | <Status s="not-built" /> | Dated ⛔ rows                                              |
-| An `async-stripe` authenticator             | <Status s="not-built" /> | Dated ⛔: `async-stripe` has no per-request hook           |
-| TLS verification                            | <Status s="unproven" />  | No test serves TLS                                         |
-| Published crate                             | <Status s="not-built" /> | `publish = false`                                          |
+| Part                                        | Status                   | Evidence                                                                                          |
+| ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
+| Handshake, token cache, single re-auth      | <Status s="built" />     | Parity ✅ rows; real-verifier conformance test                                                    |
+| `/v1` resource methods                      | <Status s="built" />     | Every method's wire shape pinned; byte-identical to Node                                          |
+| Empty or all-dots path `id` refused         | <Status s="built" />     | Since v0.9.1, on all twenty-one id-taking methods, before any request; four ✅ rows in the matrix |
+| Refunds and invoices against a running vpay | <Status s="partial" />   | Live suites against WireMock rails; no refund ever settles                                        |
+| `token_type` validation, timeout test       | <Status s="not-built" /> | Dated ⛔ rows                                                                                     |
+| An `async-stripe` authenticator             | <Status s="not-built" /> | Dated ⛔: `async-stripe` has no per-request hook                                                  |
+| TLS verification                            | <Status s="unproven" />  | No test serves TLS                                                                                |
+| Published crate                             | <Status s="not-built" /> | `publish = false`                                                                                 |
 
 The full record is the Rust column of
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md) and the crate's own

@@ -64,7 +64,7 @@ while MTN's takes the string form. Sending minor units to a rail that expects
 major units is a 100× error that nothing downstream can detect, so each adapter
 uses the encoding its rail's own documentation names.
 
-[Notch Pay](/rails/notchpay), the rail added in <Release />, also takes an
+[Notch Pay](/rails/notchpay), the rail added in v0.9.0, also takes an
 integer `amount`. Its adapter sends the stored minor units and refuses a charge
 in any currency other than XAF, whose exponent is 0, so the integer it sends is
 the amount a person reads.

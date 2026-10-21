@@ -208,7 +208,7 @@ webhook has ever reached a merchant endpoint outside the vpay repository.
 | `canceled`                | Withdrawn before any rail saw it                                                       | Nothing will be charged                                                                  |
 
 A decline carries a `FailureCode`, and which codes are reachable depends on the
-rail: MTN can produce all eleven, Orange and Notch Pay only three each. See
+rail: MTN can produce all eleven, Orange only three and Notch Pay four. See
 [failure codes](/payments/failures).
 
 ## What can go wrong

@@ -26,7 +26,7 @@ on one rail's wire. Between the two sits a single Rust trait, `ProviderAdapter`,
 in `backends/crates/vpay-provider`. Everything rail-specific lives behind it, so
 adding a rail is meant to be an adapter crate and some configuration, not a
 change to the core. <Release /> ships three: `mtn_momo`, `orange_money` and,
-new in it, `notchpay`.
+new in v0.9.0, `notchpay`.
 
 The rule that keeps it honest is mechanical and greppable: if
 `if provider == "mtn_momo"` appears anywhere outside an adapter crate, the port
@@ -125,12 +125,16 @@ None of these is rail-specific, which is why they live in the port crate.
 
 The same crate owns `http::path_segment`, the one helper an adapter calls before
 it puts a value it did not write, such as a payer's number or a reference, into
-a rail's URL path. It percent-encodes the value, and since <Release /> it also
+a rail's URL path. It percent-encodes the value, and since v0.9.0 it also
 **refuses an empty or all-dots value** before anything is sent. Escaping alone
 could not stop `.` and `..`, which would move a request to another endpoint
-under vpay's own credentials. No route reaches the refusal today, because `/v1`
-admits only digits for MTN's number and `notchpay` addresses a payment by
-vpay's own UUID.
+under vpay's own credentials. No `/v1` route reaches the refusal with a
+caller's value: `/v1` admits only digits for MTN's number, and since v0.9.1
+`notchpay` addresses a payment by the `trx.…` reference Notch Pay's own
+initialize answer returned, which the `vpay-notchpay` client puts in the path
+through the same helper. The merchant SDKs refuse the same values for the ids
+they put in `/v1` paths, since v0.9.1 (see [Node.js](/sdks/nodejs#errors) and
+[Rust](/sdks/rust#errors)).
 
 ## Branch on capabilities, never on provider codes
 
@@ -312,7 +316,7 @@ reconciler", the port leaked.
 | Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                     |
 | MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                              |
 | Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                      |
-| Notch Pay over the port                          | <Status s="unproven" />  | WireMock only; Notch Pay has never been called. See [Notch Pay](/rails/notchpay)                                                                 |
+| Notch Pay over the port                          | <Status s="unproven" />  | WireMock only; the adapter has never called Notch Pay. Its sandbox answered a probe on 2026-10-21. See [Notch Pay](/rails/notchpay)              |
 | `accepted_exposure` and its boot warning         | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                       |
 | `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read |
 | 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                           |
