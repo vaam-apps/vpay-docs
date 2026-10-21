@@ -18,8 +18,8 @@ skills:
 A PaymentIntent is vpay's record of one attempt to collect one amount from one
 payer. It follows Stripe's shape closely enough that a merchant who knows Stripe
 can read it, but it is built around a fact Stripe never had to face: on mobile
-money the rail may take minutes or hours to give a final answer, and the two
-Cameroon rails involve the payer in completely different ways. This page
+money the rail may take minutes or hours to give a final answer, and the
+Cameroon rails involve the payer in two completely different ways. This page
 explains the states, the two flow shapes, and the rule that holds the design
 together — **one charge per intent, forever**.
 
@@ -28,7 +28,8 @@ Agents working on this should load [vpay-payments](skill:vpay-payments).
 ## Two flow shapes
 
 The core never branches on a rail's name. It branches on a capability value,
-`ProviderFlow`, which is either **push** or **redirect**.
+`ProviderFlow`, which is either **push** or **redirect**. MTN MoMo and
+[Notch Pay](/rails/notchpay) are push rails; Orange Money is the redirect rail.
 
 ![A push rail (MTN MoMo) prompts the payer's handset and the intent goes processing; a redirect rail (Orange Money) sends the payer to the rail's page and the intent goes requires_action](/images/rails.svg){.diagram}
 
@@ -207,7 +208,7 @@ webhook has ever reached a merchant endpoint outside the vpay repository.
 | `canceled`                | Withdrawn before any rail saw it                                                       | Nothing will be charged                                                                  |
 
 A decline carries a `FailureCode`, and which codes are reachable depends on the
-rail: MTN can produce all eleven, Orange only three. See
+rail: MTN can produce all eleven, Orange and Notch Pay only three each. See
 [failure codes](/payments/failures).
 
 ## What can go wrong
@@ -223,15 +224,15 @@ rail: MTN can produce all eleven, Orange only three. See
 
 ## Status in this release
 
-| Part                                                              | Status                   | Evidence                                                                                             |
-| ----------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                               |
-| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                    |
-| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; over seven MTN payments succeeded against the real **sandbox** (2026-09-15) |
-| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail                |
-| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                         |
-| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                         |
-| Partial `amount_received`                                         | <Status s="not-built" /> | Neither rail can collect part of an amount                                                           |
+| Part                                                              | Status                   | Evidence                                                                                                            |
+| ----------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                                              |
+| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                                   |
+| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; over seven MTN payments succeeded against the real **sandbox** (2026-09-15)                |
+| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail                               |
+| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                                        |
+| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                                        |
+| Partial `amount_received`                                         | <Status s="not-built" /> | No rail settles part of an amount. Notch Pay's `incomplete` (paid less than asked) stays `Pending`, never a success |
 
 The full record is the **Status** section of
 [the payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md#status).

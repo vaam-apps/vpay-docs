@@ -7,6 +7,7 @@ status: partial
 sources:
   - docs/flows/crash-safety.md
   - docs/reference/vpay-worker.md
+  - docs/adr/0026-the-database-clock-schedules-jobs.md
 skills:
   - vpay-reconciler
   - vpay-payments
@@ -69,6 +70,18 @@ Every kill point leaves a committed charge **and** a job behind, because the job
 is committed in step 2's transaction. That is the reason it is enqueued there
 rather than beside step 5: kill points 1 and 2, precisely the recovery cases,
 would otherwise leave a charge nothing would ever ask the rail about.
+
+When that job becomes claimable is decided on **Postgres' clock**, not the API
+host's. Step 2 passes the poll's grace period as a delay and the statement
+computes `now() + grace`
+([ADR-0026](vpay:docs/adr/0026-the-database-clock-schedules-jobs.md)), so an API
+host whose clock runs behind or ahead of the database neither eats into nor
+stretches the grace. No ordering and no kill point changed with it.
+
+[Notch Pay](/rails/notchpay), the other push rail, is addressed the same way: by
+a reference vpay generated, the charge's own UUID. A duplicate submit answers
+`409`, which its adapter treats as the crash-retry case and reads the payment
+rather than failing it.
 
 ### The retry rule
 
@@ -201,14 +214,14 @@ dead-lettering.
 
 ## Status in this release
 
-| Part                                                 | Status                   | Evidence                                                                                                                           |
-| ---------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it` |
-| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 23 cases against real Postgres                                                                               |
-| Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                         |
-| Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                     |
-| Any kill case on Orange Money                        | <Status s="not-built" /> | Neither kill case exercises the redirect rail                                                                                      |
-| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol                                                      |
+| Part                                                 | Status                   | Evidence                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it`               |
+| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 23 cases against real Postgres                                                                                             |
+| Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                                       |
+| Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                                   |
+| Any kill case on Orange Money                        | <Status s="not-built" /> | Neither kill case exercises the redirect rail                                                                                                    |
+| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol. The MTN sandbox payments of 2026-09-15 exercised no recovery case |
 
 What is proven is that vpay executes its recovery table correctly — not that the
 rails behave as vpay's documents claim. The full record is the status notes in

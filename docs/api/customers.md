@@ -12,6 +12,7 @@ sources:
   - docs/flows/customers/privacy-and-erasure.md
   - docs/flows/customers/retention-sweep.md
   - docs/flows/customers/events.md
+  - docs/adr/0027-erasure-reaches-through-checkout-sessions.md
 skills:
   - vpay-customers
   - vpay-merchant-api
@@ -119,6 +120,13 @@ a payment intent or checkout session is the same `400` a nonexistent one gets.
 There is **no `email` filter** on the list, deliberately: a filter on a payer
 identifier turns the list into a lookup.
 
+Going the other way is allowed: since vpay 0.6.0, `customer=cus_…` filters
+`GET /v1/payment_intents`, `GET /v1/checkout/sessions` and `GET /v1/refunds`,
+in the same `WHERE` as the merchant. That is a filter by the merchant's own id,
+not a lookup by a payer identifier, and an erased customer keeps its `cus_…`, so
+the filter still finds everything that names it. See
+[filtering a list by customer](/api/#filtering-a-list-by-customer).
+
 ## Erasure: `DELETE` in one of two shapes
 
 `DELETE /v1/customers/{id}` never answers `409`. What it does depends on whether
@@ -152,9 +160,21 @@ and the _payer_ goes. The asymmetry (a `404` in one case, a `200` with
 **Every copy vpay kept goes in the same transaction**, not just the row: the
 stored `customer.*` event bodies, the payer's MSISDN on charges, the rails' raw
 decline messages (which can name the subscriber), stored idempotency response
-bodies, and receiver response excerpts. A test scans every text and JSON column
-in the schema before and after an erasure and finds none of the fixture's
-identifiers afterwards.
+bodies, and receiver response excerpts. Since vpay 0.6.0 that also covers the
+reference of an [out-of-band invoice payment](/api/invoices#paid-out-of-band)
+and every copy of it, because a cheque or transfer reference routinely names the
+payer. A test scans every text and JSON column in the schema before and after an
+erasure and finds none of the fixture's identifiers afterwards.
+
+**It reaches a payment through a checkout session too**
+([ADR-0027](vpay:docs/adr/0027-erasure-reaches-through-checkout-sessions.md)).
+Before vpay 0.6.0, a session that named a customer on an intent with none stored
+the customer on the session only, so erasing that customer left the payment's
+MSISDN and decline text behind. New sessions now write the customer onto the
+intent, and erasure also follows `checkout_sessions.customer_id` to a
+customer-less intent, in the same transaction. It never reaches an intent that
+names a different customer. One consequence is stated rather than hidden: an old
+intent whose sessions named two payers is redacted by either payer's erasure.
 
 ::: warning The one copy vpay cannot erase
 The merchant received the payer's details in `customer.created` and every
@@ -197,7 +217,8 @@ describing a merge that was lost. See [Webhooks](/api/webhooks).
 
 | Part                                     | Status                   | Evidence                                                                                          |
 | ---------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
-| Routes, object, address and GPS          | <Status s="built" />     | 24 cases in `customers.rs` through the shipping router against a real Postgres                    |
+| Routes, object, address and GPS          | <Status s="built" />     | 28 cases in `customers.rs` through the shipping router against a real Postgres                    |
+| Erasure through a checkout session       | <Status s="built" />     | ADR-0027; the whole-database scan seeds the session-only shape                                    |
 | Erasure, both shapes, every stored copy  | <Status s="built" />     | `an_erasure_leaves_no_payer_identifier_in_any_column_of_any_table`                                |
 | Events (`created`, `updated`, `deleted`) | <Status s="built" />     | asserted at the `events` row; only `customer.created` has been delivered to a test receiver       |
 | Retention sweep                          | <Status s="built" />     | proven through the real worker loop with a test-controlled horizon; no vpay has run twelve months |

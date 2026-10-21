@@ -8,6 +8,7 @@ sources:
   - docs/flows/merchant-auth.md
   - docs/flows/merchant-auth/verification-and-limits.md
   - docs/adr/0010-merchant-auth-private-key-jwt.md
+  - docs/adr/0028-a-spent-jti-outlives-the-validators-leeway.md
   - examples/merchant-curl/README.md
   - docs/runbooks/rotate-signing-key.md
 skills:
@@ -88,10 +89,17 @@ sequenceDiagram
 | `jti`          | a fresh UUIDv4 per assertion, spent exactly once server-side                                  |
 | `exp`          | `now + lifetime`, lifetime 1–300 s (the SDKs default to 60)                                   |
 
-The OP allows 60 seconds of clock leeway. Spent `jti`s do not pile up: the
-worker's hourly `sweep_expired` job deletes the expired ones, so the table holds
-at most about an hour's worth of expired rows. The delete itself is tested; no
-test asserts that the job runs it.
+The OP allows 60 seconds of clock leeway, which vpay cannot configure: it is a
+constant inside `authkestra-op`. Spent `jti`s do not pile up: the worker's hourly
+`sweep_expired` job deletes the expired ones. Since vpay 0.6.0 it keeps each
+spent `jti` for **five minutes past its `exp`**, measured on the database's
+clock ([ADR-0028](vpay:docs/adr/0028-a-spent-jti-outlives-the-validators-leeway.md)).
+Before that, a sweep landing inside the leeway could delete a spent `jti` while
+its assertion still verified, and a captured assertion could then be replayed
+once for a second access token. A test now runs the real sweep between the first
+use and a replay, and another fails CI if a dependency bump widens the leeway
+past the five minutes. What nothing checks is a database clock running more than
+about four minutes ahead of an API replica's.
 
 ::: warning `aud` is what vpay calls itself, not the URL you POST to
 The OP compares `aud` against exactly two strings, both derived from
@@ -212,7 +220,7 @@ exit `78`. Nobody has rotated one on a deployment — see
 | Part                                        | Status                   | Evidence                                                                                                                                                                                          |
 | ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Token endpoint, discovery, JWKS             | <Status s="built" />     | `merchant_token_flow.rs` boots a real router against a real Postgres; runs in CI                                                                                                                  |
-| Replay protection (`jti` spent once)        | <Status s="built" />     | `the_same_client_assertion_cannot_be_spent_twice`                                                                                                                                                 |
+| Replay protection (`jti` spent once)        | <Status s="built" />     | `the_same_client_assertion_cannot_be_spent_twice`; past a sweep, `a_spent_assertion_past_its_exp_but_inside_the_leeway_cannot_be_replayed_after_a_sweep`                                          |
 | Kill switch (`disabled_clients`)            | <Status s="built" />     | `a_disabled_client_is_refused_with_invalid_client_and_401`, no restart in between                                                                                                                 |
 | Rust SDK handshake                          | <Status s="built" />     | verified by the real pinned verifier and against a real router                                                                                                                                    |
 | Node SDK handshake                          | <Status s="built" />     | its live suites (`invoices.live.test.ts`, `refunds.live.test.ts`) start with it against a real `vpay-server` in CI's `e2e` job; the conformance bridge to the Rust verifier stays a manual recipe |

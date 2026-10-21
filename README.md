@@ -45,8 +45,8 @@ Two workflows run it:
 - [`release-parity.yml`](.github/workflows/release-parity.yml) runs every 3
   hours, and on the `vpay-release` dispatch vpay's `notify-docs` workflow
   sends when a tag lands (merged in
-  [vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246); it has not
-  run on a real tag yet). When vpay's latest release is newer than the lock, it opens **one
+  [vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246); it has
+  dispatched on each vpay tag since v0.5.0). When vpay's latest release is newer than the lock, it opens **one
   draft PR** for that release, using the org's `vaam-apps` App token so the PR
   gets CI. The PR points the lock at the new tag and **clears both
   `verifiedAt` dates**, so its `verify` check fails and lists every stale

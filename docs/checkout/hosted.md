@@ -26,7 +26,9 @@ already has, and either redirects the payer to vpay's page (**hosted**) or
 frames that page inside its own site (**embedded**). The page collects what the
 rail needs, confirms, waits for the outcome from vpay's API, and sends the payer
 back. It has been walked end to end in a real browser — but every rail behind it
-has been a WireMock stub, never MTN or Orange.
+has been a WireMock stub, never a real rail. vpay's live-sandbox runbook, which
+recorded the 2026-09-15 MTN sandbox testing, drives the plain
+[browser checkout](/checkout/browser) example, not this page.
 
 Agents working on this should load [vpay-checkout](skill:vpay-checkout).
 
@@ -96,11 +98,17 @@ into a merchant's URL.
 | ------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `/v1`   | `POST /v1/checkout/sessions`                               | Creates a session (with `client_secret`, and `url` when hosted). Refuses an intent that is not `requires_payment_method`, already has a charge, or already has an open session |
 | `/v1`   | `GET /v1/checkout/sessions/{id}`                           | The session, with `client_secret`                                                                                                                                              |
-| `/v1`   | `GET /v1/checkout/sessions`                                | A list, no secrets, filterable by `payment_intent`                                                                                                                             |
+| `/v1`   | `GET /v1/checkout/sessions`                                | A list, no secrets, filterable by `payment_intent` and, since vpay 0.6.0, by the session's own `customer`                                                                      |
 | `/v1`   | `POST /v1/checkout/sessions/{id}/expire`                   | `open` → `expired`; `409` if the payer is mid-payment                                                                                                                          |
 | browser | `GET /v1/browser/checkout/sessions/{id}?key&client_secret` | The session with the intent expanded **and** the intent's own `client_secret`, while `open`                                                                                    |
 | browser | `GET /v1/browser/checkout/sessions/{id}/return?key&t`      | The same, **without** the intent's secret — the return page's read                                                                                                             |
 | browser | `GET /v1/browser/checkout/origins?key`                     | The merchant's allowed framing origins                                                                                                                                         |
+
+A session created with `customer=cus_…` on an intent that has no customer also
+writes that customer onto the intent, in the same transaction
+([ADR-0025](vpay:docs/adr/0025-session-customer-onto-intent.md)); a later
+session naming a different customer is a `400` naming `customer`. See
+[filtering a list by customer](/api/#filtering-a-list-by-customer).
 
 The `/v1` routes need a merchant token and an `Idempotency-Key` on POST, like
 every other merchant route. Every failure on the two browser session reads is

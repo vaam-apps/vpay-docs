@@ -67,7 +67,10 @@ sequenceDiagram
 
 The MTN call uses the **same Collections subscription key and token** as a
 charge, so a deployment that can take MTN payments needs no new credential for
-it.
+it. The number is percent-encoded into its path segment, and since <Release />
+an empty or all-dots number is refused as `ProviderError::Malformed` before any
+request, the token fetch included. `/v1` admits only digits, so no route reaches
+that refusal; it guards the port.
 
 ## The wire
 
@@ -175,6 +178,7 @@ The route branches on `supports_account_holder_lookup`, never on a rail name
 | -------------- | ---------- | -------------------------------------------------------- |
 | `mtn_momo`     | `true`     | implemented against `basicuserinfo`                      |
 | `orange_money` | `false`    | the port's default `ProviderError::Unsupported`, a `400` |
+| `notchpay`     | `false`    | the port's default `ProviderError::Unsupported`, a `400` |
 
 Orange's `false` means "no Orange route is confirmed from this repository", not
 "Orange has none" — it is an open question on the
@@ -208,15 +212,15 @@ a `not_found`, and alert on a sustained `not_found` rate near 1.0.
 
 ## Status in this release
 
-| Part                                   | Status                   | Evidence                                                                                                                                                         |
-| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/account_holders` route        | <Status s="unproven" />  | Served; six integration cases over a socket against a WireMock MTN                                                                                               |
-| MTN `account_holder_name`              | <Status s="unproven" />  | Five conformance cases against WireMock; never called against MTN's real sandbox — the 2026-09-15 sandbox run charged a payment and did not call `basicuserinfo` |
-| Name-only projection, masked logs      | <Status s="built" />     | Asserted against captured `tracing` output                                                                                                                       |
-| Refund path as a second caller         | <Status s="unproven" />  | Counted and logged through the same function; WireMock only                                                                                                      |
-| Orange lookup                          | <Status s="not-built" /> | `false`; Orange's route unconfirmed                                                                                                                              |
-| Rate limit, audit log, dedicated scope | <Status s="not-built" /> | Reserved decisions for the maintainer                                                                                                                            |
-| SDK `retrieve` methods                 | <Status s="unproven" />  | Tested against HTTP stubs only, never against a running vpay                                                                                                     |
+| Part                                   | Status                   | Evidence                                                                                                                                                                     |
+| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/account_holders` route        | <Status s="unproven" />  | Served; six integration cases over a socket against a WireMock MTN                                                                                                           |
+| MTN `account_holder_name`              | <Status s="unproven" />  | Five conformance cases against WireMock; never called against MTN's real sandbox — the 2026-09-15 sandbox tests settled over seven payments and never called `basicuserinfo` |
+| Name-only projection, masked logs      | <Status s="built" />     | Asserted against captured `tracing` output                                                                                                                                   |
+| Refund path as a second caller         | <Status s="unproven" />  | Counted and logged through the same function; WireMock only                                                                                                                  |
+| Orange lookup                          | <Status s="not-built" /> | `false`; Orange's route unconfirmed                                                                                                                                          |
+| Rate limit, audit log, dedicated scope | <Status s="not-built" /> | Reserved decisions for the maintainer                                                                                                                                        |
+| SDK `retrieve` methods                 | <Status s="unproven" />  | Tested against HTTP stubs only, never against a running vpay                                                                                                                 |
 
 The full record, with every test named, is in vpay's
 [account-holder lookup flow § Status](vpay:docs/flows/account-holder-lookup.md#status).
