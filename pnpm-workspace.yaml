@@ -1,5 +1,19 @@
 # pnpm 11 refuses an install with an un-allow-listed build script
 # (strictDepBuilds). esbuild's postinstall validates the platform binary
-# vitepress's bundler shells out to; nothing else here has a build script.
+# vitepress 1's bundler shells out to. vitepress 2 bundles with rolldown and
+# no longer installs esbuild, so this entry is inert until something brings
+# esbuild back; nothing else here has a build script.
 allowBuilds:
   esbuild: true
+
+# pnpm quarantines any version published in the last 24 hours, and enforces
+# that even for a frozen install from this lockfile. The one exclusion below
+# is @vaam-apps/vitepress-md3@1.0.0, our own docs theme, published from
+# vaam-apps/vitepress-md3's v1.0.0 tag on 2026-10-21, minutes before this
+# site moved onto it.
+#
+# Pinned to that exact version on purpose: it cannot wave through any other
+# release of the package. Delete this entry once 2026-10-22 has passed and the
+# quarantine has expired on its own; nothing else depends on it.
+minimumReleaseAgeExclude:
+  - "@vaam-apps/vitepress-md3@1.0.0"

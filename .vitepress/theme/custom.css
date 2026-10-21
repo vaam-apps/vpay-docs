@@ -1,52 +1,29 @@
-/* Brand: a deep teal for the chrome, amber for the one thing a reader must
-   not miss (the "scaffold" banner). Status hues are fixed per meaning and used
-   nowhere else, the same rule vpay applies to its own status colours. */
+/* Colour comes from the Material 3 theme: the chrome from the seed in
+   .vitepress/config.ts (vpay's teal, with its amber pinned as the tertiary
+   accent). Nothing here hard-codes a hue, so every rule below follows light
+   and dark.
+
+   Status hues are fixed per meaning, the same rule vpay applies to its own
+   status colours: built is success green, partial is warning amber, unproven
+   is info blue, not built is error red. They are the theme's status
+   containers, the same ones the tip, warning, info and danger callouts use
+   for the same meanings, so a reader learns one colour code for the site. */
 :root {
-  --vp-c-brand-1: #0f766e;
-  --vp-c-brand-2: #0d9488;
-  --vp-c-brand-3: #14b8a6;
-  --vp-c-brand-soft: rgba(20, 184, 166, 0.14);
-
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #0f766e 20%, #f59e0b);
-  --vp-home-hero-image-background-image: linear-gradient(
-    135deg,
-    #14b8a655 40%,
-    #f59e0b55 60%
-  );
-  --vp-home-hero-image-filter: blur(56px);
-
-  --vpay-built-fg: #166534;
-  --vpay-built-bg: #dcfce7;
-  --vpay-partial-fg: #854d0e;
-  --vpay-partial-bg: #fef3c7;
-  --vpay-unproven-fg: #1e40af;
-  --vpay-unproven-bg: #dbeafe;
-  --vpay-notbuilt-fg: #991b1b;
-  --vpay-notbuilt-bg: #fee2e2;
-}
-
-.dark {
-  --vp-c-brand-1: #2dd4bf;
-  --vp-c-brand-2: #14b8a6;
-  --vp-c-brand-3: #0d9488;
-  --vp-c-brand-soft: rgba(45, 212, 191, 0.16);
-
-  --vpay-built-fg: #86efac;
-  --vpay-built-bg: #14532d99;
-  --vpay-partial-fg: #fcd34d;
-  --vpay-partial-bg: #78350f99;
-  --vpay-unproven-fg: #93c5fd;
-  --vpay-unproven-bg: #1e3a8a99;
-  --vpay-notbuilt-fg: #fca5a5;
-  --vpay-notbuilt-bg: #7f1d1d99;
+  --vpay-built-fg: var(--md-custom-color-on-success-container);
+  --vpay-built-bg: var(--md-custom-color-success-container);
+  --vpay-partial-fg: var(--md-custom-color-on-warning-container);
+  --vpay-partial-bg: var(--md-custom-color-warning-container);
+  --vpay-unproven-fg: var(--md-custom-color-on-info-container);
+  --vpay-unproven-bg: var(--md-custom-color-info-container);
+  --vpay-notbuilt-fg: var(--md-sys-color-on-error-container);
+  --vpay-notbuilt-bg: var(--md-sys-color-error-container);
 }
 
 /* ---- status chips ------------------------------------------------------ */
 .vpay-status {
   display: inline-block;
   padding: 1px 10px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.6rem;
@@ -88,9 +65,9 @@
   gap: 16px 32px;
   margin-top: 48px;
   padding: 16px 20px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-card);
+  background: var(--md-sys-color-surface-container-low);
   font-size: 0.875rem;
 }
 .vpay-provenance__title {
@@ -118,9 +95,9 @@
 .mermaid-figure {
   margin: 24px 0;
   padding: 16px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-card);
+  background: var(--md-sys-color-surface-container-low);
   overflow-x: auto;
 }
 .mermaid-svg {
@@ -137,26 +114,25 @@
   opacity: 0.6;
 }
 .mermaid-error {
-  color: var(--vpay-notbuilt-fg);
+  color: var(--md-sys-color-error);
   font-size: 0.85rem;
 }
 
 /* Hand-drawn SVG illustrations carry their own light background so they read
-   the same in both themes; this frames them. */
+   the same in both themes; this frames them. The theme rounds every doc
+   image with its image shape. */
 .vp-doc img.diagram {
   display: block;
   width: 100%;
   margin: 24px auto;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
 }
 .vp-doc figure.shot {
   margin: 24px 0;
 }
 .vp-doc figure.shot img {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  box-shadow: var(--vp-shadow-2);
 }
 .vp-doc figure.shot figcaption,
 .vp-doc figure figcaption {
@@ -179,4 +155,12 @@
 .vp-doc .shot-grid img {
   width: 100%;
   height: auto;
+}
+
+/* Wide tables scroll, as they did on the default theme. The house theme
+   clips a table to its rounded card (`overflow: hidden`), which cuts off the
+   last column of the status tables at doc width; `auto` keeps the corners
+   and lets the reader scroll to it. */
+#app .vp-doc table {
+  overflow-x: auto;
 }
