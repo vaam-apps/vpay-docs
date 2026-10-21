@@ -63,7 +63,7 @@ availability. What the evidence at <Release /> shows is narrower: over seven
 payments settled against **MTN's real sandbox** on 2026-09-15, using a test
 number the sandbox settles by itself. No result from the cluster tests is
 recorded yet, and everything this site marks unproven is still unproven: vpay's
-own record still shows no real payer prompted, no call to Orange or Notch Pay,
+own record still shows no real payer prompted, no call from vpay's adapters to Orange or Notch Pay,
 and no refund settled. Check each feature's status before you rely on it.
 [What works today →](/guide/status)
 :::
