@@ -11,9 +11,6 @@ hero:
   text: A Stripe-shaped gateway for Cameroon mobile money
   tagline: One API for MTN MoMo, Orange Money and the Notch Pay aggregator, with
     PaymentIntents, idempotency and signed webhooks. These docs cover it as it really is, release by release.
-  image:
-    src: /images/logo.svg
-    alt: vpay
   actions:
     - theme: brand
       text: What is vpay?
@@ -35,11 +32,11 @@ features:
     link: /payments/lifecycle
     linkText: Payment lifecycle
   - icon: 📱
-    title: Two rails, two journeys
+    title: Three rails, two journeys
     details:
-      MTN MoMo prompts the payer's handset. Orange Money redirects them to
-      Orange's page. vpay branches on the adapter's capability, never on the
-      rail's name.
+      MTN MoMo and the Notch Pay aggregator prompt the payer's handset. Orange
+      Money redirects them to Orange's page. vpay branches on the adapter's
+      capability, never on the rail's name.
     link: /rails/provider-port
     linkText: The provider port
   - icon: 🔌
@@ -59,13 +56,16 @@ features:
     linkText: Agent skills
 ---
 
-::: danger vpay is a scaffold. Do not deploy it.
-It compiles, lints clean and its tests pass, but **it cannot take a payment**.
-Over seven payments settled against **MTN's real sandbox** on 2026-09-15,
-using a test number the sandbox settles by itself. No real payer has been
-prompted, no money has moved, Orange and Notch Pay have never been called,
-no refund has ever settled, and no cluster has ever run vpay. [What works today
-→](/guide/status)
+::: warning vpay is in live testing, not generally available
+vpay is no longer a scaffold. Its maintainers are testing it for live use on
+some clusters (the owner's statement, 2026-10-21), ahead of general
+availability. What the evidence at <Release /> shows is narrower: over seven
+payments settled against **MTN's real sandbox** on 2026-09-15, using a test
+number the sandbox settles by itself. No result from the cluster tests is
+recorded yet, and everything this site marks unproven is still unproven: vpay's
+own record still shows no real payer prompted, no call from vpay's adapters to Orange or Notch Pay,
+and no refund settled. Check each feature's status before you rely on it.
+[What works today →](/guide/status)
 :::
 
 ## The shape of it

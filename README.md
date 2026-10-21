@@ -5,10 +5,12 @@ Stripe-shaped payment gateway for Cameroon mobile money rails. Built with
 [VitePress](https://vitepress.dev) and published to GitHub Pages at
 **[vpay-oss.vaam.store](https://vpay-oss.vaam.store)**.
 
-> **vpay is a scaffold. It cannot take a payment. Do not deploy it.** These
-> pages say so on every page that matters, because it is the most important
-> thing a reader has to know, and the easiest thing for docs to quietly
-> contradict.
+> **vpay is in live testing, not generally available.** It is no longer a
+> scaffold: its maintainers are testing it for live use on some clusters (the
+> owner's statement, 2026-10-21). What it has proven is still narrower than
+> that, feature by feature. These pages say so on every page that matters,
+> because it is the most important thing a reader has to know, and the easiest
+> thing for docs to quietly contradict.
 
 ## Three tiers, one rule
 

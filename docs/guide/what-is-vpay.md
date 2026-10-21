@@ -22,15 +22,17 @@ Central Africa. Merchants integrate it the way they would integrate Stripe, with
 the same object model, the same idempotency semantics and the same webhook
 signature scheme. Underneath, it talks to mobile-money rails that behave nothing
 like cards. MTN MoMo and Orange Money were the first two adapters, and
-<Release /> adds a third, [Notch Pay](/rails/notchpay), an aggregator that
-collects both networks through one account. None of them defines the
+vpay v0.9.0 added a third, [Notch Pay](/rails/notchpay), an aggregator
+that collects both networks through one account. None of them defines the
 architecture.
 
-::: danger vpay has never taken a real payment
-At <Release /> vpay is a **scaffold**. It compiles, lints clean and its tests pass,
-but it cannot take a payment. **Do not deploy it.** Apart from over seven successful MTN
-**sandbox** payments on 2026-09-15, its payment evidence comes from WireMock
-stubs. See [What works today](/guide/status).
+::: warning vpay is in live testing
+vpay is no longer a scaffold. Its maintainers are testing it for live use on
+some clusters (the owner's statement, 2026-10-21); it is not yet generally
+available. No result from those tests is recorded at <Release />: apart from
+over seven successful MTN **sandbox** payments on 2026-09-15, its recorded
+payment evidence still comes from WireMock stubs. Check a feature's status
+before relying on it. See [What works today](/guide/status).
 :::
 
 ![System overview: a merchant, the vpay-server serve and worker modes, Postgres, the two rails, the checkout page, the dashboard and outbound webhooks](/images/architecture.svg){.diagram}
@@ -131,7 +133,7 @@ flowchart LR
 
 `GET /v1/balance` is not routed anywhere, and it answers an honest `404`. A
 refund can be created, but a `201` does not mean money came back. Nothing in
-<Release /> settles a `pending` refund, and no rail has ever refunded anything.
+vpay <Release /> settles a `pending` refund, and no rail has ever refunded anything.
 
 ### The two web apps and the SDKs
 
@@ -178,7 +180,7 @@ flowchart TB
     end
     EX["examples/<br/>merchant-demo, shop, checkout-browser, ..."]
     SC["schemas/vpay.cstack"]
-    DP["deploy/helm/vpay<br/>never applied to a cluster"]
+    DP["deploy/helm/vpay<br/>no cluster run on record"]
     XT[".xtask/<br/>repo automation and verify gates"]
     DC["docs/<br/>adr, flows, runbooks, status.md, ..."]
     CR --> AP
@@ -211,14 +213,14 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 
 ## Status in this release
 
-| Part                                  | Status                   | Evidence                                                                                       |
-| ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
-| End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container |
-| MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved   |
-| Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                          |
-| Notch Pay                             | <Status s="unproven" />  | New in <Release />. Wire calls proven against WireMock only. Notch Pay has never been called   |
-| Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything       |
-| A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. No cluster has ever run vpay                   |
+| Part                                  | Status                   | Evidence                                                                                                                                    |
+| ------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container                                              |
+| MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved                                                |
+| Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                                                                       |
+| Notch Pay                             | <Status s="unproven" />  | New in v0.9.0. Proven against WireMock only; Notch Pay's sandbox answered a probe on 2026-10-21, but the adapter has never called Notch Pay |
+| Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything                                                    |
+| A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. Cluster tests reported 2026-10-21; no result on record                                      |
 
 See [What works today](/guide/status) for the full picture, and
 [`docs/status.md`](vpay:docs/status.md) for the record.

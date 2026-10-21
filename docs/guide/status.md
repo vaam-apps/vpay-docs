@@ -27,9 +27,12 @@ this page is the honest summary. The source of truth is vpay's own
 [`docs/status.md`](vpay:docs/status.md), and a build gate reads that file, so it
 cannot silently fall behind the code.
 
-::: danger vpay is a scaffold
-It compiles, lints clean and its tests pass, **but it cannot take a payment. Do
-not deploy it.**
+::: warning vpay is in live testing, not generally available
+vpay is no longer a scaffold: its maintainers are testing it for live use on
+some clusters (the owner's statement, 2026-10-21). That statement adds no
+evidence to the tables below. At <Release /> no result from those tests is
+recorded, so what this page marks unproven is still unproven. Check each
+feature's status before you rely on it.
 :::
 
 ## Real MTN sandbox evidence {#the-one-real-rail-call}
@@ -62,7 +65,8 @@ Concretely:
 - **No rail has ever refunded anything.** MTN's Disbursements product, which is
   what an MTN refund is, has never been called. `orange_money::refund` is
   `NotImplemented`, and so is `notchpay::refund`.
-- **No cluster has ever run vpay.**
+- **No cluster run is on record.** The owner reported live testing on some
+  clusters on 2026-10-21, but no result from it is recorded at <Release />.
 
 ```mermaid
 flowchart TD
@@ -185,7 +189,7 @@ must never invent one.
 
 | Part                          | Status                   | Evidence                                                                                   |
 | ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------ |
-| Taking a real payment         | <Status s="not-built" /> | The banner in `docs/status.md`: vpay cannot take a payment                                 |
+| Taking a real payment         | <Status s="not-built" /> | `docs/status.md` records no real payment: no real payer prompted, no money moved           |
 | End to end against stub rails | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green               |
 | MTN sandbox charge            | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above      |
 | Declared unimplemented paths  | <Status s="partial" />   | Two tokens, `orange_money::refund` and `notchpay::refund`, gate-checked in both directions |

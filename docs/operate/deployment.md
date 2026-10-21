@@ -2,8 +2,8 @@
 title: Deployment
 description:
   What a vpay release ships — three images, a Helm chart, compose files — how it
-  boots, what it needs around it, and the plain fact that no cluster has ever
-  run it.
+  boots, what it needs around it, and how little of it is proven in a
+  cluster.
 status: partial
 sources:
   - docs/flows/deployment.md
@@ -29,12 +29,13 @@ images contain, what has to exist around them, the order a process boots in, and
 the guards that stop a bad configuration before it becomes an outage. Read it
 with one fact in front of you.
 
-::: danger No cluster has ever run vpay
+::: warning Cluster runs are under test, not on record
 The Helm chart renders, lints and validates against Kubernetes schemas in CI.
-**No pod has ever run** — not in a real cluster, not in kind. Images are built,
-published and signed by CI; nobody has pulled one. The only places vpay has
-actually booted are Docker Compose on developer machines and in CI. vpay's own
-banner says: do not deploy it.
+vpay is now being tested for live use on some clusters (the owner's statement,
+2026-10-21), but at <Release /> vpay records **no pod running** in one — the
+one cluster observation on record is a refusal, below. The places vpay is
+recorded as having booted are Docker Compose on developer machines and in CI.
+Treat everything this page marks unproven as unproven.
 :::
 
 Agents working on deployment should load [vpay-ops](skill:vpay-ops); for the
@@ -154,7 +155,8 @@ does not say:
   provider on a private address, in the cluster or on another port needs
   `networkPolicy.idpEgress`, which renders on that one pod only.
 
-None of this has run in a cluster or against a real provider from this chart.
+None of this is on record as having run in a cluster or against a real provider
+from this chart.
 
 ## What must exist before a pod can start
 
@@ -274,7 +276,7 @@ that tells this documentation site a release landed (a `repository_dispatch` of
 type `vpay-release` to vaam-apps/vpay-docs). It has no `needs:` and no shared
 concurrency with `release.yml`, so it cannot hold up or fail a release, and a
 release that leaves these docs stale still ships. The release runbook, as of
-<Release />, records it as not yet proven on a real tag.
+vpay <Release />, records it as not yet proven on a real tag.
 
 Installing from the registry takes the shape the chart README gives:
 

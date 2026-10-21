@@ -164,3 +164,11 @@
 #app .vp-doc table {
   overflow-x: auto;
 }
+
+/* ---- home hero ----------------------------------------------------------- */
+/* VpayHeroArt draws its own backdrop shape. VPHero's blurred glow behind the
+   image is the same hue, and smears that shape's outline into a blob, so it
+   is switched off. */
+.VPHero .image-bg {
+  display: none;
+}

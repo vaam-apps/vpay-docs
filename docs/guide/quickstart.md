@@ -30,8 +30,8 @@ container.
 
 ::: warning A green demo is not a payment
 A `succeeded` in the demo means `vpay-worker` asked a stub and the stub answered
-`SUCCESSFUL`. No money moved, and no real MTN or Orange endpoint was called. The
-"do not deploy" banner still applies.
+`SUCCESSFUL`. No money moved, and no real MTN or Orange endpoint was called. It
+is no evidence for live use.
 :::
 
 ## Prerequisites
