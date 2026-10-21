@@ -7,16 +7,18 @@ status: partial
 sources:
   - docs/flows/failures.md
   - docs/status/verification/2026-09-15.md
+  - docs/flows/adapter-notchpay.md
 skills:
   - vpay-payments
   - vpay-mtn-momo
   - vpay-orange-money
+  - vpay-notchpay
 ---
 
 # Failure codes
 
-When a rail declines a payment, the merchant does not see MTN's or Orange's
-error string. They see a **`FailureCode`**: a closed vocabulary of eleven codes
+When a rail declines a payment, the merchant does not see MTN's, Orange's or
+Notch Pay's error string. They see a **`FailureCode`**: a closed vocabulary of eleven codes
 owned by vpay's core, into which each adapter maps its rail's own reasons. A
 merchant integrates against the list once, and it does not grow when a rail is
 added. This page gives the vocabulary, how rail reasons map into it, and — just
@@ -68,21 +70,22 @@ arrives as the same `payment_intent.payment_failed` event.
 ## Which rail can produce which code
 
 The vocabulary says what each code **means**. It does not say whether anything
-can **produce** it — and the two rails differ by eight of eleven.
+can **produce** it — and MTN can produce all eleven, while Orange and Notch Pay
+can produce three each.
 
-| Code                       | MTN MoMo                                    | Orange Money                |
-| -------------------------- | ------------------------------------------- | --------------------------- |
-| `insufficient_funds`       | `NOT_ENOUGH_FUNDS`                          | —                           |
-| `payer_timeout`            | `COULD_NOT_PERFORM_TRANSACTION`, `EXPIRED`  | `EXPIRED`                   |
-| `payer_declined`           | `PAYMENT_NOT_APPROVED`, `APPROVAL_REJECTED` | —                           |
-| `invalid_payer`            | `PAYER_NOT_FOUND`                           | —                           |
-| `payer_limit_reached`      | `PAYER_LIMIT_REACHED`                       | —                           |
-| `payer_account_blocked`    | `SENDER_ACCOUNT_NOT_ACTIVE` †               | —                           |
-| `invalid_payee`            | `PAYEE_NOT_FOUND`                           | —                           |
-| `payee_account_blocked`    | `PAYEE_NOT_ALLOWED_TO_RECEIVE`              | —                           |
-| `provider_account_blocked` | `NOT_ALLOWED`, HTTP 401/403                 | HTTP 401/403                |
-| `provider_unavailable`     | `SERVICE_UNAVAILABLE` on a `FAILED` body    | —                           |
-| `provider_error`           | anything unmapped                           | `FAILED`, anything unmapped |
+| Code                       | MTN MoMo                                    | Orange Money                | Notch Pay (stub only)                                                    |
+| -------------------------- | ------------------------------------------- | --------------------------- | ------------------------------------------------------------------------ |
+| `insufficient_funds`       | `NOT_ENOUGH_FUNDS`                          | —                           | —                                                                        |
+| `payer_timeout`            | `COULD_NOT_PERFORM_TRANSACTION`, `EXPIRED`  | `EXPIRED`                   | `expired`, `abandoned`                                                   |
+| `payer_declined`           | `PAYMENT_NOT_APPROVED`, `APPROVAL_REJECTED` | —                           | —                                                                        |
+| `invalid_payer`            | `PAYER_NOT_FOUND`                           | —                           | —                                                                        |
+| `payer_limit_reached`      | `PAYER_LIMIT_REACHED`                       | —                           | —                                                                        |
+| `payer_account_blocked`    | `SENDER_ACCOUNT_NOT_ACTIVE` †               | —                           | —                                                                        |
+| `invalid_payee`            | `PAYEE_NOT_FOUND`                           | —                           | —                                                                        |
+| `payee_account_blocked`    | `PAYEE_NOT_ALLOWED_TO_RECEIVE`              | —                           | —                                                                        |
+| `provider_account_blocked` | `NOT_ALLOWED`, HTTP 401/403                 | HTTP 401/403                | HTTP 401/403                                                             |
+| `provider_unavailable`     | `SERVICE_UNAVAILABLE` on a `FAILED` body    | —                           | —                                                                        |
+| `provider_error`           | anything unmapped                           | `FAILED`, anything unmapped | `failed`, `canceled`, `rejected`, a `400`/`422` on initialize or process |
 
 † `SENDER_ACCOUNT_NOT_ACTIVE` and `COULD_NOT_PERFORM_TRANSACTION` are **not** in
 MTN's published `ErrorReason` enum. Both are mapped anyway, and declared as
@@ -97,10 +100,24 @@ as `EXPIRED`, indistinguishable from one who walked away, so `payer_declined` is
 unreachable on Orange. vpay refuses to invent a `CANCELLED` to make the rails
 look alike.
 
+### Why Notch Pay can say so little
+
+Notch Pay's status read, as its specification documents it, carries a status and
+no reason. A payer with no funds and a payer who never answered both read
+`failed`, so `insufficient_funds` and `payer_declined` are unreachable there.
+`canceled` maps to `provider_error`, not `payer_declined`, because anyone holding
+the merchant's public key can cancel a payment too
+([Notch Pay](/rails/notchpay#the-production-risk)). A `503` or a timeout is a
+transport error, never a decline, which is why `provider_unavailable` is a dash.
+**This column is transcription, not observation**: nothing has called Notch Pay,
+and its sandbox's outcome numbers are what will show whether the live read says
+more.
+
 ::: tip For merchants
 Write one branch per code — that is the right integration. Do **not** assume
-every branch is reachable on the rail in front of you: on Orange only
-`payer_timeout`, `provider_account_blocked` and `provider_error` can occur.
+every branch is reachable on the rail in front of you: on Orange and on Notch
+Pay only `payer_timeout`, `provider_account_blocked` and `provider_error` can
+occur.
 :::
 
 ### No code is deleted
@@ -121,13 +138,14 @@ runbook is [provider-error-rate](vpay:docs/runbooks/provider-error-rate.md).
 
 ## Status in this release
 
-| Part                                | Status                  | Evidence                                                                                                                                                                               |
-| ----------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                                                                                                   |
-| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case                                                                           |
-| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                                                                                                |
-| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                     |
-| Mappings faithful to the real rails | <Status s="unproven" /> | No real rail has ever declined a vpay charge: every decline came from WireMock; MTN's sandbox was called on one day (2026-09-15) and produced no decline; Orange has never been called |
+| Part                                | Status                  | Evidence                                                                                                                                                                                              |
+| ----------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                                                                                                                  |
+| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case                                                                                          |
+| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                                                                                                               |
+| Notch Pay mapping                   | <Status s="unproven" /> | The eleven documented statuses mapped and unit-tested; five driven against WireMock; none read from Notch Pay                                                                                         |
+| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                                    |
+| Mappings faithful to the real rails | <Status s="unproven" /> | No real rail has ever declined a vpay charge: every decline came from WireMock; MTN's sandbox was called on one day (2026-09-15) and produced no decline; Orange and Notch Pay have never been called |
 
 The first documented sandbox session took three runs: the first two stopped at
 the token mint on adapter bugs, and the third settled its charge. Over seven
@@ -145,7 +163,8 @@ The full record is the **Status** section of
   including the conformance case per row
 - [docs/flows/adapter-mtn-momo.md](vpay:docs/flows/adapter-mtn-momo.md) and
   [docs/flows/adapter-orange-money.md](vpay:docs/flows/adapter-orange-money.md)
-  — each rail's mapping
+  and [docs/flows/adapter-notchpay.md](vpay:docs/flows/adapter-notchpay.md) —
+  each rail's mapping
 - [Errors](/payments/errors) — how `charge_declined` is classified, and why it
   is not the `FailureCode` itself
 - Skill: [vpay-payments](skill:vpay-payments)

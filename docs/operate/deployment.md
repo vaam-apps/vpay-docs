@@ -14,6 +14,7 @@ sources:
   - deploy/helm/vpay/README.md
   - docs/runbooks/release.md
   - .github/workflows/notify-docs.yml
+  - docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md
   - docs/runbooks/migrations.md
   - docs/status/gates.md
 skills:
@@ -64,6 +65,14 @@ which in Kubernetes replaces the entrypoint (measured: that spelling exits 127).
 A separate `vpay-worker` image existed until it was retired; its GHCR package is
 frozen and nothing publishes to it.
 
+**The two Node images run as the numeric `USER 1000:1000`.** Each Deployment
+sets `runAsNonRoot` with no UID of its own, and the kubelet cannot verify a
+_named_ user against it: on 2026-10-18, on a real cluster with chart 0.6.0 and
+`dashboard.enabled: true`, it refused the image that said `USER node`. Both
+stages now say `USER 1000:1000`. No dashboard or checkout pod has yet been seen
+starting under `runAsNonRoot: true`; `docker run`, which makes no such check, is
+all the evidence so far.
+
 ## The shape of a Kubernetes deployment
 
 ```mermaid
@@ -96,8 +105,9 @@ flowchart TD
   WRK --> PG
   MGT --> PG
   DSH -->|"BFF, in-cluster, to -management or -server"| MGT
-  WRK -->|"egress"| RAILS["MTN MoMo, Orange Money"]
+  WRK -->|"egress"| RAILS["MTN MoMo, Orange Money, Notch Pay"]
   SRV -->|"egress"| RAILS
+  MGT -.->|"egress, staff SSO only"| IDP["OpenID Connect provider"]
 ```
 
 The chart renders the server and worker always; the management tier, the
@@ -109,6 +119,42 @@ backups, point-in-time recovery and retention are an obligation on whoever runs
 Postgres, and the policy for them
 ([ADR-0013](vpay:docs/adr/0013-database-backups-and-retention.md)) is also only
 proposed: no vpay database has ever been backed up.
+
+### As a dependency of another chart
+
+A wrapper chart can list this one under `dependencies:`. Helm hands the parent's
+`global` values to every subchart and validates them against the subchart's
+closed `values.schema.json`, so since vpay 0.6.0 the schema lists `global`.
+Before that, every parent chart failed `helm lint` and `helm template` with
+`additional properties 'global' not allowed`. **`global` has no effect**:
+nothing in the chart reads it, and every other unknown key is still refused.
+Configure vpay from the parent under the `vpay:` key. `just helm-check` lints
+and renders a real parent chart that depends on this one by `file://` path; the
+published OCI chart has not been consumed as a dependency from a registry.
+
+### Staff single sign-on
+
+Staff can sign in to the dashboard through an external OpenID Connect provider
+([Staff sign-in](/dashboard/authentication#single-sign-on-through-an-openid-connect-provider)).
+**It is configured in the profile overlay, not in a chart value**: a
+`staff_auth.sso` block in `config.overlay` is the whole switch, and a release
+whose overlay has none renders exactly what it did before. Three things the YAML
+does not say:
+
+- **The client secret is a new key in the `rails.existingSecret` Secret**,
+  `VPAY_STAFF_SSO_CLIENT_SECRET`. Add it before the overlay that writes the
+  block rolls out: an unresolved `${…}` is exit 78 on every vpay process, not
+  an empty string.
+- **`redirect_uri` is the dashboard's callback**,
+  `<dashboard.publicOrigin>/api/auth/sso/callback`, registered at the provider.
+  The chart cannot check it; a mismatch fails at sign-in, not at install.
+- **The pod that serves `/dash/v1` now calls the provider over HTTPS**:
+  `-management` when it is enabled, otherwise `-server`. A public provider on
+  port 443 is already reachable under the chart's default egress rules. A
+  provider on a private address, in the cluster or on another port needs
+  `networkPolicy.idpEgress`, which renders on that one pod only.
+
+None of this has run in a cluster or against a real provider from this chart.
 
 ## What must exist before a pod can start
 
@@ -267,6 +313,8 @@ helm upgrade --install vpay oci://ghcr.io/vaam-apps/charts/vpay --version "$VERS
 | Compose (local and CI)                           | <Status s="built" />     | Boots in CI's `e2e` job and `just demo`                                                     |
 | Metrics and alerts                               | <Status s="unproven" />  | Series emitted and asserted in tests; never scraped, no rule ever evaluated                 |
 | Management tier and autoscaling (ADR-0022)       | <Status s="unproven" />  | Rendered and guarded; the ADR is Proposed                                                   |
+| As a subchart of another chart                   | <Status s="partial" />   | A `file://` parent that sets `global` lints and renders in `just helm-check`                |
+| Staff SSO configuration and IdP egress           | <Status s="unproven" />  | Renders byte-identical without the block; never booted in a cluster or against a real IdP   |
 | Database backups                                 | <Status s="not-built" /> | ADR-0013 proposed; no backup has ever been taken                                            |
 
 The full record is the Status section of

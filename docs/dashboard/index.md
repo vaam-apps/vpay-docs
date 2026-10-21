@@ -110,12 +110,12 @@ surface. The detail response is vpay's own shape
 
 ## The screens
 
-| Page                                                  | What it shows                                                                                 |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `/login`, `/login/totp`, `/login/password`            | The sign-in — see [authentication](/dashboard/authentication)                                 |
-| `/payments`                                           | The bound merchant's intents, newest first; status and created-range filters, cursor paging   |
-| `/payments/{id}`                                      | The intent, its charge, its refunds, the last error with its failure code, the event timeline |
-| `/refunds`, `/deliveries`, `/customers`, `/checkouts` | Read-only lists, one page at a time, no filter controls                                       |
+| Page                                                  | What it shows                                                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`, `/login/totp`, `/login/password`            | The sign-in — see [authentication](/dashboard/authentication). With single sign-on configured, `/login` also offers "Sign in with Keycloak" |
+| `/payments`                                           | The bound merchant's intents, newest first; status and created-range filters, cursor paging                                                 |
+| `/payments/{id}`                                      | The intent, its charge, its refunds, the last error with its failure code, the event timeline                                               |
+| `/refunds`, `/deliveries`, `/customers`, `/checkouts` | Read-only lists, one page at a time, no filter controls                                                                                     |
 
 The navigation is generated from one array and a test fails if it ever links to
 a page that does not exist — a menu entry for an unwritten page is the same lie
@@ -139,17 +139,21 @@ the screens are held to rules about **absence**:
 - **An unknown status renders as text**, not as a coloured pill. A green badge
   on an unfamiliar status is a claim.
 - **The timeline names what it cannot show.** Under it, a banner says the
-  timeline is not the whole history of a payment and names the event types
-  nothing writes. The banner is itself out of date: it still names five
-  (`payment_intent.created`, `payment_intent.processing`,
-  `payment_intent.canceled`, `charge.refunded`, `charge.refund.updated`), but
-  the last three have had writers since 2026-09-10 and 2026-09-16. Only
-  `payment_intent.created` and `payment_intent.processing` are still written by
-  nothing — see [Webhooks](/api/webhooks).
+  timeline is not the whole history of a payment and names the two event types
+  nothing writes, `payment_intent.created` and `payment_intent.processing` — see
+  [Webhooks](/api/webhooks). Until vpay 0.6.0 it named five, three of which had
+  gained writers; its test now also refuses the three that have one. One gap is
+  read from the code and not yet tested: a refund's events are stored against
+  the refund's own `re_…` id, and the timeline asks only for the intent's and
+  the charge's, so a real refund's events may not reach it.
 - **The merchant is on every page**, beside the staff member's address, so an
   empty list is distinguishable from looking at the wrong merchant.
 - **Payer credentials never appear.** The checkout list's source type does not
   even carry `client_secret_suffix` or `return_token`.
+- **`?customer=` is refused.** It is `/v1`'s
+  [customer filter](/api/#filtering-a-list-by-customer), and on
+  `GET /dash/v1/payment_intents` it is a `400` naming `customer`. Until vpay
+  0.6.0 it was silently ignored there, answering every customer's intents.
 - **Configuration fails closed.** The API URL, client id, redirect URI and scope
   are read at container start; if one is missing, `/login` names the variables
   and offers no form.
@@ -166,7 +170,10 @@ the screens are held to rules about **absence**:
   app (`dashboard.enabled`, off by default) and a separate `/dash/v1`-only
   backend tier (`management.enabled`). The image was run by hand with a
   read-only root filesystem and answered its health path — but **no Kubernetes
-  pod has ever run**, of this app or anything else in the chart.
+  pod has ever run**, of this app or anything else in the chart. On 2026-10-18 a
+  real cluster refused to start the dashboard image because it declared a named
+  `USER node`; the image now declares the numeric `USER 1000:1000`, and no pod
+  of it has been seen starting since.
 
 ::: warning Two deployment traps, already documented
 The management tier does **not** serve `POST /v1/oauth/token` (that mints the
@@ -184,6 +191,7 @@ gateway at all is an open maintainer decision. See
 | --------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
 | `/dash/v1` boundary, the two payment reads, boot refusals | <Status s="built" />     | `backends/tests/integration/tests/dashboard_read_surface.rs` over a booted server and real Postgres |
 | Sign-in and the pages, in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` signs in through the real OP against the compose stack and reads payments         |
+| Single sign-on routes                                     | <Status s="partial" />   | Built and covered by vitest against stubbed `fetch`; no browser has run them                        |
 | Refunds, deliveries, customers, checkouts lists           | <Status s="partial" />   | Read-only lists over CrateStack procedures; no filters                                              |
 | The BFF read surface                                      | <Status s="partial" />   | Six handlers, reviewed and browser-tested; pages render from server-side reads, not through it      |
 | Writes and `audit_log`                                    | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                    |

@@ -12,6 +12,7 @@ sources:
   - docs/flows/payment-lifecycle.md
   - docs/reference/rails.md
   - docs/runbooks/provider-error-rate.md
+  - docs/flows/adapter-notchpay.md
 skills:
   - vpay-provider-adapters
   - vpay-conventions
@@ -23,8 +24,9 @@ vpay's core decides what a payment _means_ — its lifecycle, its ledger, its
 reconciliation, its failure vocabulary. An **adapter** decides how to say that
 on one rail's wire. Between the two sits a single Rust trait, `ProviderAdapter`,
 in `backends/crates/vpay-provider`. Everything rail-specific lives behind it, so
-adding a third Central African rail is meant to be an adapter crate and some
-configuration, not a change to the core.
+adding a rail is meant to be an adapter crate and some configuration, not a
+change to the core. <Release /> ships three: `mtn_momo`, `orange_money` and,
+new in it, `notchpay`.
 
 The rule that keeps it honest is mechanical and greppable: if
 `if provider == "mtn_momo"` appears anywhere outside an adapter crate, the port
@@ -50,6 +52,8 @@ classDiagram
         <<trait>>
         +code() str
         +capabilities() Capabilities
+        +payer_fields() PayerField[]
+        +accepted_exposure() AcceptedExposure
         +submit(charge, config) Submitted
         +query_status(charge, config) ChargeStatus
         +parse_callback(body) CallbackRef
@@ -78,9 +82,14 @@ classDiagram
         vpay-adapter-orange-money
         flow Redirect
     }
+    class NotchPay {
+        vpay-adapter-notchpay
+        flow Push
+    }
     ProviderAdapter ..> Capabilities : declares
     MtnMomo ..|> ProviderAdapter
     OrangeMoney ..|> ProviderAdapter
+    NotchPay ..|> ProviderAdapter
     Measured ..|> ProviderAdapter
     Measured o-- ProviderAdapter : inner
 ```
@@ -95,9 +104,13 @@ classDiagram
 | `parse_destination`   | Optional. Reads the adapter's own `destination[<rail_code>][…]` sub-map from a refund request into a `RefundTarget`. The core strips the rail code and interprets nothing inside.                                                                                                                                                                |
 | `refund`              | Optional, gated by `supports_refunds`. Answers `Refunded` — which carries `fee: Option<Money>` rather than a redirect URL. The default body is `ProviderError::Unsupported`.                                                                                                                                                                     |
 | `account_holder_name` | Optional, gated by `supports_account_holder_lookup`. Defaults to `ProviderError::Unsupported`. See [account-holder lookup](/rails/account-holder-lookup).                                                                                                                                                                                        |
+| `payer_fields`        | Optional. What a payer must fill in before this rail can be confirmed. The one declaration drives both the rail spec the checkout page renders and the confirm-time validation of `payment_method_data[<code>][…]`, so the two cannot drift. Defaults to none, which is right for a redirect rail; `mtn_momo` declares its MSISDN.               |
+| `code`                | The stable rail code, equal to its `payment_method_types` value.                                                                                                                                                                                                                                                                                 |
 | `capabilities`        | A static declaration the core reads instead of special-casing a rail.                                                                                                                                                                                                                                                                            |
+| `accepted_exposure`   | Optional, `None` by default. What the key a rail's status read accepts lets someone other than vpay do, on a rail admitted under [ADR-0031](vpay:docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md). Boot logs it at `WARN`, naming the credential and never its value. Only `notchpay` declares one.                            |
 
-The three network methods are `async` via `#[async_trait]` (a native `async fn`
+The four network methods (`submit`, `query_status`, `refund` and
+`account_holder_name`) are `async` via `#[async_trait]` (a native `async fn`
 would not be dyn-safe). `ProviderConfig` carries `base_url`, `callback_url`,
 `currency`, `settings`, `credentials` and two deadlines, `connect_timeout` and
 `request_timeout` — on the config rather than the HTTP client, because one
@@ -105,10 +118,19 @@ would not be dyn-safe). `ProviderConfig` carries `base_url`, `callback_url`,
 
 ### What every rail call inherits
 
-All outbound rail traffic goes through `vpay_provider::http`, so both adapters
-share the same refusals: redirects are returned rather than followed, proxy
+All outbound rail traffic goes through `vpay_provider::http`, so every adapter
+shares the same refusals: redirects are returned rather than followed, proxy
 environment variables are ignored, and response bodies are capped at 256 KiB.
 None of these is rail-specific, which is why they live in the port crate.
+
+The same crate owns `http::path_segment`, the one helper an adapter calls before
+it puts a value it did not write, such as a payer's number or a reference, into
+a rail's URL path. It percent-encodes the value, and since <Release /> it also
+**refuses an empty or all-dots value** before anything is sent. Escaping alone
+could not stop `.` and `..`, which would move a request to another endpoint
+under vpay's own credentials. No route reaches the refusal today, because `/v1`
+admits only digits for MTN's number and `notchpay` addresses a payment by
+vpay's own UUID.
 
 ## Branch on capabilities, never on provider codes
 
@@ -116,15 +138,21 @@ The core asks an adapter what it can do and acts on the answer. The two
 capabilities [ADR-0002](vpay:docs/adr/0002-provider-port.md) names are `flow`
 and `supports_refunds`; the port now declares seven.
 
-| Capability                       | `mtn_momo` | `orange_money` | What the core does with it                                                                               |
-| -------------------------------- | ---------- | -------------- | -------------------------------------------------------------------------------------------------------- |
-| `flow`                           | `Push`     | `Redirect`     | whether a confirm needs a payer number or a return URL, and whether `submit` may answer a `redirect_url` |
-| `supports_refunds`               | `true`     | `true`         | refuses a refund on a rail with no refund API, with no rail-specific branch                              |
-| `supports_partial_refunds`       | `true`     | `false`        | refuses a part-refund on a rail that declares `false`                                                    |
-| `delivers_callbacks`             | `true`     | `true`         | whether to expect a notification at all — which is a hint either way                                     |
-| `requires_ip_allowlist`          | `true`     | `false`        | an operational fact for a deployment, not a code path                                                    |
-| `supports_account_holder_lookup` | `true`     | `false`        | refuses `GET /v1/account_holders` with a `400` on a rail with no such API                                |
-| `refund_destination`             | `Required` | `Required`     | whether a refund needs an explicit payee; read by the refund route                                       |
+| Capability                       | `mtn_momo` | `orange_money` | `notchpay` | What the core does with it                                                                               |
+| -------------------------------- | ---------- | -------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
+| `flow`                           | `Push`     | `Redirect`     | `Push`     | whether a confirm needs a payer number or a return URL, and whether `submit` may answer a `redirect_url` |
+| `supports_refunds`               | `true`     | `true`         | `true`     | refuses a refund on a rail with no refund API, with no rail-specific branch                              |
+| `supports_partial_refunds`       | `true`     | `false`        | `true`     | refuses a part-refund on a rail that declares `false`                                                    |
+| `delivers_callbacks`             | `true`     | `true`         | `true`     | whether to expect a notification at all — which is a hint either way                                     |
+| `requires_ip_allowlist`          | `true`     | `false`        | `false`    | an operational fact for a deployment, not a code path                                                    |
+| `supports_account_holder_lookup` | `true`     | `false`        | `false`    | refuses `GET /v1/account_holders` with a `400` on a rail with no such API                                |
+| `refund_destination`             | `Required` | `Required`     | `Origin`   | whether a refund needs an explicit payee; read by the refund route                                       |
+
+`notchpay` is the first shipping rail that declares `Origin`, so it is the first
+on which the core **refuses** a refund `destination` rather than demanding one.
+On an `Origin` rail the core hands the adapter the charge's `provider_txn_id`,
+so the refund can name the payment it unwinds. Its `refund` is still a declared
+token, so that arm moves no money yet.
 
 ```mermaid
 flowchart TD
@@ -147,7 +175,8 @@ Two different errors mean "this will not work", and the difference is the point:
   vpay has not written the call. Such a rail declares the capability `true`
   anyway and overrides the method with a named token, which
   `cargo xtask verify-status` requires to be listed in vpay's status page.
-  `orange_money::refund` is the one such token in <Release />.
+  `orange_money::refund` and `notchpay::refund` are the two such tokens in
+  <Release />.
 
 A rail leaving that list says nothing about whether its written call has ever
 been made. `mtn_momo::refund` left it on 2026-09-15 when the Disbursements call
@@ -156,14 +185,17 @@ was written — and that call has **never been made against MTN** (see
 
 ## Callbacks are hints
 
-Neither rail signs its notifications or sends a shared secret, so anyone who can
-reach the callback URL can post anything to it. vpay's answer is that a callback
-is only ever a _hint to look sooner_:
+MTN and Orange do not sign their notifications or send a shared secret. Notch
+Pay does sign its webhooks, but the port gives `parse_callback` no headers, so
+vpay cannot check the signature; a draft RFC designs that check and nothing
+builds it. So anyone who can reach a callback URL can post anything to it.
+vpay's answer is that a callback is only ever a _hint to look sooner_:
 
 1. `parse_callback` extracts identifiers and nothing else — the body's `status`
    field is not read.
 2. `POST /provider/{code}/callback` uses those identifiers only to bring the
-   charge's already-queued `poll_charge` job forward. It never writes charge or
+   charge's `poll_charge` job forward, enqueueing it first if none is queued. It
+   never writes charge or
    intent state, and it discards any key material the adapter extracted.
 3. The worker then runs the **authenticated** `query_status` — and that is what
    settles the charge.
@@ -171,7 +203,7 @@ is only ever a _hint to look sooner_:
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Rail as Rail (MTN or Orange)
+    participant Rail as Rail (MTN, Orange or Notch Pay)
     participant CB as vpay-api callback route
     participant Ad as Adapter
     participant Jobs as jobs table
@@ -206,7 +238,9 @@ rate limit**, per charge or per source.
 ## Stub rails are configuration, not code
 
 [ADR-0006](vpay:docs/adr/0006-no-mocks-in-main-processes.md) forbids any mock,
-fake, stub or dummy reachable from `vpay-server` or `vpay-worker-bin`. A stub
+fake, stub or dummy reachable from a shipping binary. The ADR names
+`vpay-server` and `vpay-worker-bin`; the two have been one binary,
+`vpay-server`, with `serve` and `worker` modes, since 2026-09-07. A stub
 rail is instead a **`wiremock/wiremock` host named in configuration** — the same
 `providers[].host` mechanism a deployment uses to reach a real rail. Sandbox,
 production and stub are three configuration profiles, not three code paths.
@@ -270,16 +304,18 @@ reconciler", the port leaked.
 
 ## Status in this release
 
-| Part                                             | Status                   | Evidence                                                                                                                          |
-| ------------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| The trait, capabilities and `Measured` decorator | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                       |
-| Shared conformance suite over both rails         | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                  |
-| Callback route as a hint                         | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit                                                                      |
-| Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                      |
-| MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                               |
-| Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                       |
-| `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange is `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read |
-| 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                            |
+| Part                                             | Status                   | Evidence                                                                                                                                         |
+| ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The trait, capabilities and `Measured` decorator | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                      |
+| Shared conformance suite over all three rails    | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                 |
+| Callback route as a hint                         | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit                                                                                     |
+| Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                     |
+| MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                              |
+| Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                      |
+| Notch Pay over the port                          | <Status s="unproven" />  | WireMock only; Notch Pay has never been called. See [Notch Pay](/rails/notchpay)                                                                 |
+| `accepted_exposure` and its boot warning         | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                       |
+| `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read |
+| 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                           |
 
 The full, dated record is in vpay's
 [provider-port flow § Status](vpay:docs/flows/provider-port.md#status).
@@ -292,6 +328,7 @@ The full, dated record is in vpay's
 - [ADR-0006: no test doubles in shipping processes](vpay:docs/adr/0006-no-mocks-in-main-processes.md)
 - [Rails reference](vpay:docs/reference/rails.md) — per-adapter implementation
   notes, the callback URL contract
-- [Payment lifecycle](/payments/lifecycle) and
-  [the reconciler](/payments/reconciler) on this site
+- [Payment lifecycle](/payments/lifecycle),
+  [the reconciler](/payments/reconciler) and [Notch Pay](/rails/notchpay) on
+  this site
 - Skill: [vpay-provider-adapters](skill:vpay-provider-adapters)

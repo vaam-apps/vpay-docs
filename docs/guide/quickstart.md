@@ -53,8 +53,11 @@ just up               # Postgres + a WireMock host per rail
 
 `just up` runs `compose.yml` alone. It starts Postgres on `:5432`,
 `wiremock-mtn` on `:8081` and `wiremock-orange` on `:8082`. That is enough to
-run the binaries directly (see below). `just down` removes those containers and
-their volume. Run `just` with no argument to list every task.
+run the binaries directly (see below). Since <Release /> it also starts
+`wiremock-notchpay`, a stand-in for Notch Pay with no host port; no vpay process
+talks to it unless you uncomment the `notchpay` block in
+`config/application.yml`, and the demo below does not start it. `just down`
+removes those containers and their volume. Run `just` with no argument to list every task.
 
 ## The demo
 

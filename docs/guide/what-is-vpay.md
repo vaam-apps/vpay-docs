@@ -21,8 +21,10 @@ vpay is meant to be a small, provider-agnostic payment gateway for Cameroon and
 Central Africa. Merchants integrate it the way they would integrate Stripe, with
 the same object model, the same idempotency semantics and the same webhook
 signature scheme. Underneath, it talks to mobile-money rails that behave nothing
-like cards. MTN MoMo and Orange Money are the first two adapters. Neither of
-them defines the architecture.
+like cards. MTN MoMo and Orange Money were the first two adapters, and
+<Release /> adds a third, [Notch Pay](/rails/notchpay), an aggregator that
+collects both networks through one account. None of them defines the
+architecture.
 
 ::: danger vpay has never taken a real payment
 At <Release /> vpay is a **scaffold**. It compiles, lints clean and its tests pass,
@@ -54,6 +56,9 @@ picks between them using a **capability value** (`flow`), never a rail name.
 | Intent status after `confirm`            | `processing`                    | `requires_action`                     |
 | Who holds the payer's identifier         | vpay (it is an input to submit) | The rail. vpay may never learn it     |
 | **Can the payer act before vpay saves?** | **Yes**                         | **No**                                |
+
+Notch Pay is a push rail too: its payer approves a prompt on their handset, so
+it follows the MTN column.
 
 The last row matters more than the others. On a push rail the payer's phone
 starts buzzing as soon as vpay calls MTN, so vpay must save the reference
@@ -109,7 +114,7 @@ flowchart LR
     M["Merchant backend<br/>(SDK or stripe-node)"] -->|"/v1 (bearer token)"| S
     B["Payer's browser<br/>(checkout page, stripe-js)"] -->|"/v1/browser (pk + client_secret)"| S
     ST["Staff (dashboard app)"] -->|"/dash/v1"| S
-    RL["Rail"] -.->|"POST /provider/{code}/callback<br/>never called by MTN or Orange"| S
+    RL["Rail"] -.->|"POST /provider/{code}/callback<br/>never called by any rail"| S
     S["vpay-server (serve)"] --> DB[("Postgres")]
     WK["vpay-server worker"] --> DB
     S -->|"submit on confirm"| RL
@@ -121,7 +126,7 @@ flowchart LR
 | -------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `/v1`                            | A merchant's server, with a bearer token from `POST /v1/oauth/token`    | Payment intents, checkout sessions, customers, invoices, events, refunds, account holders |
 | `/v1/browser`                    | A payer's page, with a publishable key and the intent's `client_secret` | Built, and walked by a real browser against stub rails                                    |
-| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                       | Proven against WireMock. **MTN and Orange have never called it**                          |
+| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                       | Proven against WireMock. **No rail has ever called it**                                   |
 | `/dash/v1`                       | The dashboard app's server, under a staff session                       | Staff sign-in and read routes. None of the dashboard writes ADR-0008 describes is built   |
 
 `GET /v1/balance` is not routed anywhere, and it answers an honest `404`. A
@@ -211,6 +216,7 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 | End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container |
 | MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved   |
 | Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                          |
+| Notch Pay                             | <Status s="unproven" />  | New in <Release />. Wire calls proven against WireMock only. Notch Pay has never been called   |
 | Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything       |
 | A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. No cluster has ever run vpay                   |
 

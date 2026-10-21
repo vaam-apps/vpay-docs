@@ -42,6 +42,7 @@ flowchart LR
     PI -->|"confirm: exactly one, ever"| CH["Charge"]
     CH -->|"amount in integer minor units"| PORT["Provider port<br/>(ProviderAdapter)"]
     PORT -->|"capability: flow = push"| MTN["mtn_momo"]
+    PORT -->|"capability: flow = push"| NP["notchpay"]
     PORT -->|"capability: flow = redirect"| OR["orange_money"]
     CB["Rail callback"] -.->|"hint: identifiers only"| JOB["poll_charge job"]
     JOB --> REC["Reconciler<br/>(vpay-server worker)"]
@@ -106,11 +107,11 @@ protocol and maps that rail's failures into vpay's `FailureCode` and
 The core never asks _which_ rail it is talking to. It reads the rail's declared
 **capabilities** and branches on their values:
 
-| Capability                 | `mtn_momo` | `orange_money` |
-| -------------------------- | ---------- | -------------- |
-| `flow`                     | `Push`     | `Redirect`     |
-| `supports_refunds`         | `true`     | `true`         |
-| `supports_partial_refunds` | `true`     | `false`        |
+| Capability                 | `mtn_momo` | `orange_money` | `notchpay` |
+| -------------------------- | ---------- | -------------- | ---------- |
+| `flow`                     | `Push`     | `Redirect`     | `Push`     |
+| `supports_refunds`         | `true`     | `true`         | `true`     |
+| `supports_partial_refunds` | `true`     | `false`        | `true`     |
 
 Code outside an adapter crate that branches on a provider code, as in
 `if provider == "mtn_momo"`, is a defect. Adding a rail means making the one
@@ -128,8 +129,8 @@ so it cannot sneak a status in from the request. Full page:
 [Reconciler](/payments/reconciler).
 
 ::: warning Never received from a real rail
-The callback route is proven against WireMock. MTN and Orange have never called
-it.
+The callback route is proven against WireMock. MTN, Orange and Notch Pay have
+never called it.
 :::
 
 ## One charge per intent
@@ -210,7 +211,7 @@ A late success, at minute 40 or at hour 30, is normal. The intent stayed
 | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                        |
 | One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                      |
-| Provider port and capabilities | <Status s="partial" />  | Both adapters pass the shared conformance suite, against WireMock containers                                                          |
+| Provider port and capabilities | <Status s="partial" />  | All three adapters pass the shared conformance suite, against WireMock containers                                                     |
 | Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                               |
 | Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                                   |
 | Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Rail evidence is WireMock plus over seven successful MTN sandbox payments |

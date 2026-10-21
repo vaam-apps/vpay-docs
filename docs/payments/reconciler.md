@@ -76,6 +76,16 @@ A rung is one `UPDATE jobs SET run_at = now() + delay`. The queue adds at most
 the one-second idle sleep on top: measured on the shipping loop, the last of a
 backlog of eight was claimed 1.028 s after it committed at worst.
 
+**One clock decides when a job is due: Postgres'.** The rungs always were. Since
+[ADR-0026](vpay:docs/adr/0026-the-database-clock-schedules-jobs.md), a job's
+_first_ `run_at` is too: the confirm's poll, the backstop's re-enqueues, a
+resubmission, every webhook delivery job, the singletons a worker seeds at boot
+and the callback route's enqueue all pass a delay, and the statement computes
+`now() + delay`. Before that, each stamped its own host's clock while the claim
+judged it with the database's, so a skewed host made jobs run early or late. The
+queue-age gauge is subtracted in SQL for the same reason. No rung, interval or
+ordering changed.
+
 ## Timers assert nothing
 
 ```mermaid

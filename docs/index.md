@@ -9,9 +9,8 @@ sources:
 hero:
   name: vpay
   text: A Stripe-shaped gateway for Cameroon mobile money
-  tagline:
-    One API for MTN MoMo and Orange Money, with PaymentIntents, idempotency and
-    signed webhooks. These docs cover it as it really is, release by release.
+  tagline: One API for MTN MoMo, Orange Money and the Notch Pay aggregator, with
+    PaymentIntents, idempotency and signed webhooks. These docs cover it as it really is, release by release.
   image:
     src: /images/logo.svg
     alt: vpay
@@ -64,7 +63,7 @@ features:
 It compiles, lints clean and its tests pass, but **it cannot take a payment**.
 Over seven payments settled against **MTN's real sandbox** on 2026-09-15,
 using a test number the sandbox settles by itself. No real payer has been
-prompted, no money has moved, Orange has never been called,
+prompted, no money has moved, Orange and Notch Pay have never been called,
 no refund has ever settled, and no cluster has ever run vpay. [What works today
 →](/guide/status)
 :::

@@ -117,6 +117,7 @@ export default defineMd3Config({
             { text: "The provider port", link: "/rails/provider-port" },
             { text: "MTN MoMo", link: "/rails/mtn-momo" },
             { text: "Orange Money", link: "/rails/orange-money" },
+            { text: "Notch Pay", link: "/rails/notchpay" },
             {
               text: "Account-holder lookup",
               link: "/rails/account-holder-lookup",

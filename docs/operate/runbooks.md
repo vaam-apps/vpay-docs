@@ -12,6 +12,7 @@ sources:
   - docs/runbooks/deploy-and-rollback.md
   - docs/runbooks/live-sandbox-test.md
   - docs/runbooks/migrations.md
+  - docs/runbooks/notchpay-sandbox-test.md
   - docs/runbooks/provider-error-rate.md
   - docs/runbooks/release.md
   - docs/runbooks/restore-from-backup.md
@@ -28,7 +29,7 @@ skills:
 
 # Runbooks
 
-vpay ships thirteen runbooks. Each answers three questions: how do I know this
+vpay ships fourteen runbooks. Each answers three questions: how do I know this
 is happening, what do I do, and how do I know it is fixed. This page is the
 index a human reads first — one section per runbook, the gist in a few lines,
 and a link to the real procedure, which is where the SQL and the commands are.
@@ -71,6 +72,7 @@ flowchart TD
   L -->|"the whole stack on WireMock rails"| DM["demo"]
   L -->|"integrating the checkout page"| CO["checkout"]
   L -->|"MTN's real sandbox"| LS["live-sandbox-test"]
+  L -->|"Notch Pay's real sandbox"| NP["notchpay-sandbox-test"]
 ```
 
 The alert names are the rules in the chart's `PrometheusRule`; each rule's
@@ -257,8 +259,9 @@ been performed on a deployment.
   `disabled_clients`, effective on the next token request; tokens already issued
   live out their 900-second TTL.
 
-_Evidence:_ no real rail credential had been used when this was written, and no
-`kubectl` step has been run.
+_Evidence:_ no `kubectl` step has been run, and no credential rotation has been
+observed. The MTN sandbox tests of 2026-09-15 used real sandbox credentials, but
+they do not exercise this procedure.
 [docs/runbooks/rotate-rail-credentials.md](vpay:docs/runbooks/rotate-rail-credentials.md)
 · background: [Configuration](/operate/configuration#rail-credentials)
 
@@ -316,6 +319,30 @@ _Evidence:_ the one page whose commands have run against a real rail, on
 [docs/runbooks/live-sandbox-test.md](vpay:docs/runbooks/live-sandbox-test.md) ·
 background: [MTN MoMo](/rails/mtn-momo)
 
+### Test Notch Pay against its sandbox
+
+**When:** taking the `notchpay` rail to **Notch Pay's real sandbox** for the
+first time, with a Notch Pay test-mode account.
+
+- **Part A** is a probe, `cargo build -p vpay-notchpay --example sandbox_probe`,
+  that asks Notch Pay's sandbox the open questions and writes a redacted report.
+  It runs in phases: a read-only one first, then payments, then webhooks.
+- **Part B** runs vpay itself with `--profile notchpay-sandbox` (still
+  `livemode: false`) and takes one sandbox payment that succeeds and one that
+  fails through the adapter.
+- Test keys only: boot refuses a key with neither `test.` nor `test_` outside
+  livemode. Keep them in an env file outside the repository, and never paste
+  one anywhere.
+- vpay trusts only its vendored root certificates and ignores proxy variables,
+  so a TLS-intercepting proxy stops every call. The probe alone accepts an extra
+  CA bundle, for a Claude Code cloud session only; vpay itself never does.
+
+_Evidence:_ **written on 2026-10-20 and never run against Notch Pay.** Its
+probe was run against the repository's WireMock stub, and Part B was booted up
+to its health checks against a local Postgres with fixture keys.
+[docs/runbooks/notchpay-sandbox-test.md](vpay:docs/runbooks/notchpay-sandbox-test.md)
+· background: [Notch Pay](/rails/notchpay)
+
 ## Status in this release
 
 | Runbook group                                       | Status                  | Evidence                                                                             |
@@ -324,6 +351,7 @@ background: [MTN MoMo](/rails/mtn-momo)
 | Worker queue, webhook failures, migrations, restore | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment        |
 | Deploy/rollback, both rotations, release            | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster |
 | Unresolved charges, provider error rate             | <Status s="unproven" /> | Alerts never evaluated; thresholds proposed                                          |
+| Notch Pay sandbox test                              | <Status s="unproven" /> | Written; never run against Notch Pay                                                 |
 
 The authoritative account of what each page has and has not been exercised
 against is [docs/runbooks/README.md](vpay:docs/runbooks/README.md).

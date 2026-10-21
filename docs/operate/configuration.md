@@ -12,6 +12,7 @@ sources:
   - config/application.yml
   - config/application-sandbox.yml
   - config/application-live.yml
+  - config/application-notchpay-sandbox.yml
 skills:
   - vpay-ops
 ---
@@ -79,13 +80,17 @@ key, so an overlay only needs the keys that differ. **Lists replace wholesale**
 that profile, which is why `config/application-live.yml` restates its one
 merchant and one rail in full.
 
-The repository ships three files. `application.yml` is deliberately
+The repository ships four files. `application.yml` is deliberately
 sandbox-shaped (`livemode: false`, rail hosts pointing at the compose WireMock
 stubs). `application-sandbox.yml` is the CLI's default profile.
 `application-live.yml` is a _prod-shaped local_ overlay: it still has
 `livemode: false`, but points `mtn_momo` at MTN's real sandbox — it is what the
-[live sandbox runbook](/operate/runbooks#live-sandbox-test) runs. None of the
-three is a production configuration.
+[live sandbox runbook](/operate/runbooks#live-sandbox-test) runs.
+`application-notchpay-sandbox.yml`, new in <Release />, does the same for
+`notchpay` and Notch Pay's real sandbox, with `notchpay` as its only rail; it is
+what the [Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)
+runs, and nobody has run it against Notch Pay yet. None of the four is a
+production configuration.
 
 ## How a configuration is resolved at boot
 
@@ -173,10 +178,17 @@ place outside an adapter crate that matches on a rail code — a recorded interi
 until the port grows a hook for it
 ([ADR-0012](vpay:docs/adr/0012-rail-configuration-requirements-in-config.md)):
 
-| Rail           | Required keys                                                                                             |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| `mtn_momo`     | `settings.target_environment`, `settings.api_user`, `credentials.subscription_key`, `credentials.api_key` |
-| `orange_money` | `credentials.merchant_key`, `credentials.client_id`, `credentials.client_secret`                          |
+| Rail           | Required keys                                                                                                                                                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mtn_momo`     | `settings.target_environment`, `settings.api_user`, `credentials.subscription_key`, `credentials.api_key`                                                                                                                                                      |
+| `orange_money` | `credentials.merchant_key`, `credentials.client_id`, `credentials.client_secret`                                                                                                                                                                               |
+| `notchpay`     | `settings.channel` (exactly `cm.mobile`), `credentials.public_key`, `credentials.private_key`, currency `XAF`; the keys' test marker (`test.` or `test_`) must agree with `deployment.livemode`; in livemode only, `settings.accept_public_key_exposure: true` |
+
+The `notchpay` block ships **commented out** in `config/application.yml`.
+Because boot checks every configured rail, enabled or not, uncommenting it makes
+`NOTCHPAY_PUBLIC_KEY` and `NOTCHPAY_PRIVATE_KEY` mandatory for every deployment
+of the file, and every boot then logs the rail's public-key exposure at `WARN`.
+Read [Notch Pay](/rails/notchpay#the-production-risk) before you uncomment it.
 
 ::: warning The Disbursements keys are defined, not real
 The three `MTN_DISBURSEMENT_*` variables feed MTN refunds. They are deliberately
@@ -254,7 +266,8 @@ The full record, including every test name, is the Status section of
 - [ADR-0012: rail configuration requirements in config](vpay:docs/adr/0012-rail-configuration-requirements-in-config.md)
 - [config/application.yml](vpay:config/application.yml),
   [config/application-sandbox.yml](vpay:config/application-sandbox.yml),
-  [config/application-live.yml](vpay:config/application-live.yml) — all three
-  read as annotated examples
+  [config/application-live.yml](vpay:config/application-live.yml),
+  [config/application-notchpay-sandbox.yml](vpay:config/application-notchpay-sandbox.yml)
+  — all four read as annotated examples
 - [Deployment](/operate/deployment) — how the file and its secrets reach a pod
 - Skill: [vpay-ops](skill:vpay-ops)

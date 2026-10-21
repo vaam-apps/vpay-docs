@@ -122,8 +122,9 @@ match confirmed.status {
 ```
 
 Two things the types do for you. `ConfirmPaymentIntentParams` has one variant
-per rail — `mtn_momo(msisdn)` for the push rail, `orange_money(return_url)` for
-the redirect rail — so the two cannot be mixed up. And there is no `failed`
+per rail — `mtn_momo(msisdn)` and, since <Release />, `notchpay(msisdn)` for the
+push rails, `orange_money(return_url)` for the redirect rail — so they cannot be
+mixed up. And there is no `failed`
 status: a rail refusal returns the intent to `RequiresPaymentMethod` with
 `last_payment_error` set ([Payment lifecycle](/payments/lifecycle)).
 `last_payment_error.code` is an open `String` on purpose, so a failure code
@@ -133,6 +134,22 @@ The client exposes `payment_intents()`, `checkout().sessions()`, `customers()`,
 `invoices()`, `invoice_items()`, `refunds()`, `events()`, `balance()` and
 `account_holders()`. As in Node, there is no `events().retrieve()`, and
 `balance().retrieve()` reaches a `404` because the server has no `/v1/balance`.
+
+### Two source-breaking changes since vpay 0.6.0
+
+Both bite only code that builds a params struct with a literal naming every
+field and no `..Default::default()`. `Default::default()`, field assignment and
+the constructors are unaffected, and the bytes on the wire did not change for an
+existing call.
+
+- **`ListPaymentIntentsParams`, `ListCheckoutSessionsParams` and
+  `ListRefundsParams` gained `customer: Option<String>`**, the
+  [customer filter](/api/#filtering-a-list-by-customer). Add `customer: None`.
+  A server older than 0.6.0 ignores the filter and returns the unfiltered list.
+- **`PayInvoiceParams` gained `out_of_band: Option<OutOfBandParams>`**, to
+  record a payment made outside vpay
+  ([paid out of band](/api/invoices#paid-out-of-band)). The invoice model
+  gained `paid_out_of_band` and `out_of_band_payment`.
 
 ## Errors
 

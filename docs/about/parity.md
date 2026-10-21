@@ -58,9 +58,10 @@ dates. Only a person does that, and until they do the check stays red.
 The fast path is a `vpay-release` dispatch from vpay's own
 [`notify-docs`](https://github.com/vaam-apps/vpay/blob/master/.github/workflows/notify-docs.yml) workflow the moment a
 tag lands. It merged on 2026-09-23
-([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)) and has
-not run on a real tag yet; the first vpay release after it is its first run.
-The 3-hourly poll stays as the fallback.
+([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)), and this
+repository's `release-parity` runs show a `vpay-release` dispatch arriving on
+each vpay tag date from v0.5.0 to v0.9.0. The 3-hourly poll stays as the
+fallback.
 
 ## What the check refuses
 
@@ -109,6 +110,19 @@ missing pages. It listed **31** stale pages rather than 13, because the release
 also carried vpay's own corrections to about twenty stale claims
 ([vaam-apps/vpay#243](https://github.com/vaam-apps/vpay/pull/243)), and those
 changed files under pages the dry run never saw move.
+
+### When a bump is merged unsigned
+
+The loop has a gap a person has to close: a bot PR can be merged with its
+`verifiedAt` dates still `null`, and `verify` on `main` then stays red. The
+v0.5.0 PR re-read every page it named but was merged with the dates still
+`null`, and the PRs for v0.6.0, v0.7.0, v0.8.0 and v0.9.0 were each merged
+unsigned with no re-read at all. Each new bump recorded only the release before
+it under `previous`, so the stale list named only what changed in the last
+release, while the pages had last been re-read against v0.5.0. The re-read that signed the lock
+off against v0.9.0 therefore covered everything that changed from v0.5.0 to
+v0.9.0, not only from v0.8.0, and added the pages those four releases made
+necessary: [Notch Pay](/rails/notchpay) and eight architecture decisions.
 
 ## How a page declares what it covers
 

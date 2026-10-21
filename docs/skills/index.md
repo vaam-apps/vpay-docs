@@ -20,6 +20,7 @@ skills:
   - vpay-provider-adapters
   - vpay-mtn-momo
   - vpay-orange-money
+  - vpay-notchpay
   - vpay-frontend
   - vpay-checkout
   - vpay-dashboard
@@ -131,6 +132,7 @@ flowchart TD
   rail --> port[vpay-provider-adapters]
   rail --> mtn[vpay-mtn-momo]
   rail --> om[vpay-orange-money]
+  rail --> np[vpay-notchpay]
   start --> ui["Touch a screen"]
   ui --> fe[vpay-frontend]
   ui --> co[vpay-checkout]
