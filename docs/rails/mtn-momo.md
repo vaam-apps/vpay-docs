@@ -237,9 +237,11 @@ Disbursement API, so the adapter reuses the Collections failure table.
 
 ## The sandbox testing of 2026-09-15 {#the-sandbox-run-of-2026-09-15}
 
-Over seven payments succeeded during this testing. The maintainer who ran the
-tests confirmed that historical count on 2026-10-20; this is an evidence
-correction, not a new test run or a change to the pinned release.
+Over seven payments succeeded during this testing. Valantine Suh
+(@Valsuh45), who performed the tests, confirmed that count on 2026-10-20. That
+is a correction to the testing record, not a new test run: vpay's record first
+reported one payment, and until later the same day it also named the
+maintainer as the person who ran the tests.
 
 **The first recorded payment.** Using the `live` profile
 (`deployment.livemode: false`, on `localhost`), a EUR `mtn_momo` PaymentIntent (`pi_xxd2xj1e914e16c6m63gezag`) was
@@ -291,16 +293,16 @@ mean nothing to MTN's sandbox; against the real sandbox use `46733123454`.
 
 ## Status in this release
 
-| Part                                    | Status                  | Evidence                                                                              |
-| --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
-| Collections token mint                  | <Status s="partial" />  | Called against MTN's real sandbox on 2026-09-15                                       |
-| `submit` / `query_status` (push charge) | <Status s="partial" />  | Over seven sandbox payments succeeded 2026-09-15; WireMock conformance otherwise      |
-| `parse_callback` and the callback route | <Status s="unproven" /> | Built; only vpay's own tests have ever called it                                      |
-| Failure mapping                         | <Status s="unproven" /> | Every row driven against WireMock; no MTN decline ever observed                       |
-| `refund` (Disbursements `transfer`)     | <Status s="unproven" /> | Written and WireMock-proven; never called; no real credential; refunds stay `pending` |
-| `account_holder_name`                   | <Status s="unproven" /> | WireMock only; path-segment case and `404` behaviour unverified                       |
-| MTN production                          | <Status s="unproven" /> | Never called; production host and environment unconfirmed                             |
-| 401 → re-mint → retry                   | <Status s="unproven" /> | No test covers it                                                                     |
+| Part                                    | Status                  | Evidence                                                                                             |
+| --------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Collections token mint                  | <Status s="partial" />  | Called against MTN's real sandbox on 2026-09-15                                                      |
+| `submit` / `query_status` (push charge) | <Status s="partial" />  | Over seven sandbox payments succeeded 2026-09-15; WireMock conformance otherwise                     |
+| `parse_callback` and the callback route | <Status s="unproven" /> | Built; only vpay's own tests have ever called it                                                     |
+| Failure mapping                         | <Status s="unproven" /> | Every row driven against WireMock; no MTN decline ever observed                                      |
+| `refund` (Disbursements `transfer`)     | <Status s="unproven" /> | Written and WireMock-proven; never called; no real credential; refunds stay `pending`                |
+| `account_holder_name`                   | <Status s="unproven" /> | WireMock only; `404` behaviour unverified. An empty or all-dots number is refused before any request |
+| MTN production                          | <Status s="unproven" /> | Never called; production host and environment unconfirmed                                            |
+| 401 → re-mint → retry                   | <Status s="unproven" /> | No test covers it                                                                                    |
 
 The full record is in vpay's
 [MTN adapter flow § Status](vpay:docs/flows/adapter-mtn-momo.md#status) and the

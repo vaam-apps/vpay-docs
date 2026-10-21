@@ -1,9 +1,10 @@
 ---
 title: Dashboard authentication
 description:
-  How a staff member signs in to the dashboard — password, mandatory TOTP,
-  vpay's own authorization-code grant with PKCE — and how sessions, re-minting,
-  rate limits and sign-out work.
+  How a staff member signs in to the dashboard — password and mandatory TOTP, or
+  an OpenID Connect provider such as Keycloak, then vpay's own
+  authorization-code grant with PKCE — and how sessions, re-minting, rate limits
+  and sign-out work.
 status: partial
 sources:
   - docs/flows/dashboard-auth.md
@@ -14,6 +15,8 @@ sources:
   - docs/adr/0017-staff-authentication.md
   - docs/adr/0018-cross-tenant-admin-reads.md
   - docs/adr/0019-credential-model.md
+  - docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md
+  - docs/flows/dashboard-auth/sso.md
 skills:
   - vpay-dashboard
 ---
@@ -21,13 +24,16 @@ skills:
 # Dashboard authentication
 
 Staff sign in to the dashboard with a password and a mandatory six-digit TOTP
-code, against a staff table vpay owns. The dashboard's own server then runs an
-OAuth authorization-code grant with PKCE against vpay's **in-process** OpenID
-Provider and receives a short-lived `/dash/v1` access token — which it never
-shows to the browser. `/dash/v1` accepts no merchant API key and federates to no
-external identity provider. This is built and tested end to end against a real
-server and a real browser; it has never run in a deployment, and signing keys
-have never been rotated.
+code, against a staff table vpay owns, or, since vpay 0.8.0, through an external
+OpenID Connect provider such as Keycloak. Either way the dashboard's own server
+then runs an OAuth authorization-code grant with PKCE against vpay's
+**in-process** OpenID Provider and receives a short-lived `/dash/v1` access
+token — which it never shows to the browser. `/dash/v1` accepts no merchant API
+key, and its tokens never come from an external provider: only the human step
+can federate. Password and TOTP sign-in is built and tested end to end against a
+real server and a real browser; single sign-on is tested against a real Keycloak
+but no browser has run its dashboard routes. Neither has run in a deployment,
+and signing keys have never been rotated.
 
 Agents working on this should load [vpay-dashboard](skill:vpay-dashboard).
 
@@ -36,7 +42,7 @@ Agents working on this should load [vpay-dashboard](skill:vpay-dashboard).
 
 ## Who can sign in
 
-There is no sign-up. The **only** way to create a staff member is the CLI:
+There is no sign-up. A password staff member is created only by the CLI:
 
 ```bash
 vpay-server staff add --merchant … --email … --name …
@@ -47,10 +53,14 @@ It prints a one-time password on stdout and marks the account
 optional `--admin` flag (default off) grants cross-tenant **reads** — see
 [below](#admins).
 
+The other way in is a first successful [single sign-on](#single-sign-on-through-an-openid-connect-provider),
+which creates the staff member itself.
+
 Credentials live in a `credentials` table, one row per credential. Eight kinds
-are declared and **two are implemented** — the argon2id password and RFC 6238
-TOTP. `hotp`, `magic_link`, `email_otp`, `phone_otp`, `webauthn` and `oidc` are
-reachable by no code path; federated identity has columns and no writer.
+are declared and **three are implemented**: the argon2id password, RFC 6238
+TOTP and, since vpay 0.8.0, `oidc`, a federated identity keyed on
+`(issuer, subject)` and never on email. `hotp`, `magic_link`, `email_otp`,
+`phone_otp` and `webauthn` are reachable by no code path.
 
 ## Signing in
 
@@ -103,6 +113,79 @@ would be a staler copy of the same fact. There is one issuer,
 
 **No machine client can read the dashboard.** A `client_credentials` token
 carries no `vpay_merchant_id` claim, and nothing but this grant stamps one.
+
+## Single sign-on through an OpenID Connect provider
+
+Since vpay 0.8.0 ([ADR-0030](vpay:docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md)),
+a deployment can let staff sign in through an external OpenID Connect provider.
+A `staff_auth.sso` block in the configuration is the whole switch: without it
+nothing changes, and with it `/login` offers a "Sign in with Keycloak" button
+beside the password form, which always stays.
+
+**Only the human step federates.** vpay redeems the provider's code, verifies
+its id_token, reads the claims and discards it. The provider's access token is
+never read and no provider token is stored. A successful callback ends in the
+same `authenticated` session row the TOTP step ends in, and the dashboard then
+runs the unchanged authorization-code leg against vpay's own OP.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Staff browser
+    participant D as Dashboard server
+    participant V as vpay /dash/v1
+    participant K as Provider (Keycloak)
+    B->>D: Sign in with Keycloak
+    D->>V: POST /dash/v1/staff/sso/start
+    Note over V: new state, nonce and PKCE verifier, one flow row, ten minutes
+    V-->>D: pending session, authorization_url
+    D-->>B: 303 to the provider
+    B->>K: password and second factor
+    K-->>B: 302 to the dashboard's callback with code and state
+    B->>D: GET /api/auth/sso/callback
+    D->>V: POST /dash/v1/staff/sso/callback
+    Note over V: take the flow once, compare state
+    V->>K: token endpoint, client secret and code_verifier
+    K-->>V: id_token
+    Note over V: signature, iss, aud, azp, exp, iat, nonce, then group, then second factor
+    V-->>D: authenticated session
+    D->>V: authorization-code leg, unchanged
+    D-->>B: 303 /payments
+```
+
+What vpay checks, in order:
+
+- **The id_token itself**: signature from the provider's published keys (no
+  `none`, no HMAC), `iss`, `aud`, `azp`, `exp`, `iat` and the flow's `nonce`.
+  The flow row is deleted when the callback takes it, so two callbacks cannot
+  both proceed.
+- **A group**: the person must be in `required_group`, compared exactly.
+- **A second factor**: the token's `amr` must intersect `accepted_amr`, or its
+  `acr` be in `accepted_acr`. Both lists empty is a boot refusal. For Keycloak
+  the rule is `accepted_amr: [otp]`, because its `acr` is a level that proves
+  nothing about a second factor. When this is the token's **only** defect, vpay
+  sends the browser back to the provider once with `prompt=login`, which covers
+  a person who enrolled their OTP during this sign-in; a second miss is refused.
+
+The first successful sign-in of a person in the group **creates the staff
+member**, in one transaction with its `oidc` credential, bound to
+`dashboard_client.merchant_id` and never an admin. **Roles stay local**: no
+claim sets `is_admin` or the merchant. If the token's email already belongs to
+an unlinked staff member, sign-in is refused and logged rather than linked.
+Every refusal is the same `401` as the password path, with the reason only in
+vpay's log.
+
+The provider has to be set up for this: a confidential client with PKCE and the
+dashboard's `/api/auth/sso/callback` as its redirect URI, a group mapper and an
+`amr` mapper, and a browser flow whose steps carry `amr` references. vpay's
+[SSO flow](vpay:docs/flows/dashboard-auth/sso.md) lists the Keycloak settings.
+How it is deployed is on [Deployment](/operate/deployment#staff-single-sign-on).
+
+**Not built:** linking an existing password member to an SSO identity, logout at
+the provider (signing out of vpay does not end the provider's session), a
+continuous group check (a person removed from the group keeps their session
+until it ends; disabling the member is the kill switch), and any provider but
+Keycloak 26.6.1 tested.
 
 ## Sessions
 
@@ -225,17 +308,19 @@ the flag is read.
 
 ## Status in this release
 
-| Part                                       | Status                   | Evidence                                                                                                                                     |
-| ------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Password, TOTP, sessions, PKCE grant       | <Status s="built" />     | `backends/tests/integration/tests/staff_sign_in.rs` drives the real router on a real socket over real Postgres and mints no token of its own |
-| Sign-in in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` enrols from the QR the screen displayed, changes the password, exchanges the code, signs out                               |
-| Shared rate-limit budget, trusted proxies  | <Status s="built" />     | Two vpay servers over one Postgres read `429` on the sixth attempt against a budget of five                                                  |
-| Admin cross-tenant reads                   | <Status s="built" />     | `dashboard_read_surface.rs` cases for admin, non-admin and write refusal                                                                     |
-| Sweep of expired sessions and codes        | <Status s="not-built" /> | Expired rows are refused on read and never deleted on a schedule                                                                             |
-| Signing-key rotation                       | <Status s="not-built" /> | One key per process life; `oauth_signing_keys` exists and no code reads or writes it                                                         |
-| Disabling the dashboard client             | <Status s="not-built" /> | Only by removing it from YAML and restarting; per-person `status` works                                                                      |
-| Other credential kinds, federated identity | <Status s="not-built" /> | Declared in the schema, no verifier                                                                                                          |
-| Running in a deployment                    | <Status s="not-built" /> | No Kubernetes pod has ever run the dashboard or its backend tier                                                                             |
+| Part                                      | Status                   | Evidence                                                                                                                                                        |
+| ----------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Password, TOTP, sessions, PKCE grant      | <Status s="built" />     | `backends/tests/integration/tests/staff_sign_in.rs` drives the real router on a real socket over real Postgres and mints no token of its own                    |
+| Sign-in in a real browser                 | <Status s="built" />     | `dashboard.cy.ts` enrols from the QR the screen displayed, changes the password, exchanges the code, signs out                                                  |
+| Shared rate-limit budget, trusted proxies | <Status s="built" />     | Two vpay servers over one Postgres read `429` on the sixth attempt against a budget of five                                                                     |
+| Admin cross-tenant reads                  | <Status s="built" />     | `dashboard_read_surface.rs` cases for admin, non-admin and write refusal                                                                                        |
+| Sweep of expired sessions and codes       | <Status s="not-built" /> | Expired rows are refused on read and never deleted on a schedule                                                                                                |
+| Signing-key rotation                      | <Status s="not-built" /> | One key per process life; `oauth_signing_keys` exists and no code reads or writes it                                                                            |
+| Disabling the dashboard client            | <Status s="not-built" /> | Only by removing it from YAML and restarting; per-person `status` works                                                                                         |
+| Single sign-on through Keycloak           | <Status s="partial" />   | `staff_sso.rs` against a simulated provider and `staff_sso_keycloak.rs` against a real Keycloak 26.6.1 container; no browser has run the dashboard's SSO routes |
+| Linking an existing member to SSO         | <Status s="not-built" /> | Members come only from a first SSO sign-in                                                                                                                      |
+| Other credential kinds                    | <Status s="not-built" /> | `hotp`, `magic_link`, `email_otp`, `phone_otp`, `webauthn`: declared in the schema, no verifier                                                                 |
+| Running in a deployment                   | <Status s="not-built" /> | No Kubernetes pod has ever run the dashboard or its backend tier                                                                                                |
 
 The full record is
 [dashboard-auth.md § Status](vpay:docs/flows/dashboard-auth.md#status).
@@ -250,6 +335,8 @@ The full record is
 - [ADR-0017: how a staff member signs in](vpay:docs/adr/0017-staff-authentication.md)
 - [ADR-0018: cross-tenant admin reads](vpay:docs/adr/0018-cross-tenant-admin-reads.md)
   · [ADR-0019: the credential model](vpay:docs/adr/0019-credential-model.md)
+- [ADR-0030: staff sign-in federates to an OpenID Connect provider](vpay:docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md)
+  · [Single sign-on, the flow](vpay:docs/flows/dashboard-auth/sso.md)
 - [The staff dashboard](/dashboard/),
   [Merchant API authentication](/api/authentication)
 - Skill: [vpay-dashboard](skill:vpay-dashboard)

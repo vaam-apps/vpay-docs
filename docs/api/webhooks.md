@@ -41,23 +41,23 @@ be written. A custom type would be silently dropped by any merchant using
 stripe-node's typed event union or an exhaustive `switch`, which is why a late
 success is a plain `payment_intent.succeeded` and not something new.
 
-| Type                            | Written by                                                       |
-| ------------------------------- | ---------------------------------------------------------------- |
-| `payment_intent.created`        | **nothing** — events are for terminal transitions only           |
-| `payment_intent.processing`     | **nothing** — same reason                                        |
-| `payment_intent.succeeded`      | the settlement transaction                                       |
-| `payment_intent.payment_failed` | the settlement transaction, **and** a decline at submit          |
-| `payment_intent.canceled`       | `POST /v1/payment_intents/{id}/cancel`                           |
-| `charge.refunded`               | `POST /v1/refunds`                                               |
-| `charge.refund.updated`         | a refund's metadata update, cancel, or a rail refusing it        |
-| `checkout.session.expired`      | the hourly expiry sweep (not a merchant's own `expire`)          |
-| `customer.created`              | `POST /v1/customers`                                             |
-| `customer.updated`              | `POST /v1/customers/{id}` when something changed                 |
-| `customer.deleted`              | `DELETE /v1/customers/{id}` and the twelve-month retention sweep |
-| `invoice.created`               | `POST /v1/invoices`                                              |
-| `invoice.finalized`             | `POST /v1/invoices/{id}/finalize`                                |
-| `invoice.paid`                  | the settlement transaction                                       |
-| `invoice.voided`                | `POST /v1/invoices/{id}/void`                                    |
+| Type                            | Written by                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `payment_intent.created`        | **nothing** — events are for terminal transitions only                                  |
+| `payment_intent.processing`     | **nothing** — same reason                                                               |
+| `payment_intent.succeeded`      | the settlement transaction                                                              |
+| `payment_intent.payment_failed` | the settlement transaction, **and** a decline at submit                                 |
+| `payment_intent.canceled`       | `POST /v1/payment_intents/{id}/cancel`                                                  |
+| `charge.refunded`               | `POST /v1/refunds`                                                                      |
+| `charge.refund.updated`         | a refund's metadata update, cancel, or a rail refusing it                               |
+| `checkout.session.expired`      | the hourly expiry sweep (not a merchant's own `expire`)                                 |
+| `customer.created`              | `POST /v1/customers`                                                                    |
+| `customer.updated`              | `POST /v1/customers/{id}` when something changed                                        |
+| `customer.deleted`              | `DELETE /v1/customers/{id}` and the twelve-month retention sweep                        |
+| `invoice.created`               | `POST /v1/invoices`                                                                     |
+| `invoice.finalized`             | `POST /v1/invoices/{id}/finalize`                                                       |
+| `invoice.paid`                  | the settlement transaction, or an [out-of-band payment](/api/invoices#paid-out-of-band) |
+| `invoice.voided`                | `POST /v1/invoices/{id}/void`                                                           |
 
 A few shapes to know:
 
@@ -178,7 +178,10 @@ stateDiagram-v2
 ```
 
 - **Eight POSTs over about 31 hours**: the first attempt, then 10 s, 30 s, 2 m,
-  10 m, 1 h, 6 h, 24 h. Then `exhausted`, with an `alert = true` log line.
+  10 m, 1 h, 6 h, 24 h. Then `exhausted`, with an `alert = true` log line. Every
+  rung is measured on the database's clock since vpay 0.6.0
+  ([ADR-0026](vpay:docs/adr/0026-the-database-clock-schedules-jobs.md)), so a
+  worker host with a skewed clock moves no rung.
 - **Every non-2xx walks the whole ladder, `4xx` included.** Answering `410 Gone`
   does not stop it — a `404` from a receiver mid-deploy looks the same as one
   meaning "stop". To retire an endpoint, remove it from config.

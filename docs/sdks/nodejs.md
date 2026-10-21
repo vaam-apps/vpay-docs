@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.5.0`. Being published
+2026-09-23. The manifest in <Release /> is version `0.9.0`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
@@ -131,8 +131,24 @@ their handset; a redirect rail (Orange) answers `requires_action` with a URL to
 send the payer to ([Payment lifecycle](/payments/lifecycle)). The client also
 exposes `refunds`, `events.list`, `checkout.sessions`, `customers`, `invoices`,
 `invoiceItems`, `accountHolders` and `balance`; the package README covers each.
-`events.retrieve` does not exist in this SDK (a dated parity gap), and
-`balance.retrieve` reaches a `404` because the server serves no `/v1/balance`.
+`PaymentMethodType` is `"mtn_momo" | "orange_money" | "notchpay"` since
+<Release />.
+
+Two additions from vpay 0.6.0 are worth knowing:
+
+- **`paymentIntents.list`, `refunds.list` and `checkout.sessions.list` take
+  `customer`** ([filtering a list by customer](/api/#filtering-a-list-by-customer)).
+  A server older than 0.6.0 does not know the parameter and silently returns the
+  **unfiltered** list, every customer's rows, with no error. Check the server's
+  version before relying on it.
+- **`invoices.pay` takes an optional `outOfBand` object** (`method`,
+  `reference`, `receivedAt`) to record a payment made outside vpay
+  ([paid out of band](/api/invoices#paid-out-of-band)). A `success_url` or
+  `cancel_url` beside it is refused with a `TypeError` before any request. The
+  hosted arm of `PayInvoiceParams` is the old shape, so existing callers are
+  unaffected.
+  `events.retrieve` does not exist in this SDK (a dated parity gap), and
+  `balance.retrieve` reaches a `404` because the server serves no `/v1/balance`.
 
 `create()` and `retrieve()` return the intent's `client_secret` — the payer
 credential you hand to [the browser client](/sdks/stripe). It is absent from
@@ -263,7 +279,10 @@ right bytes" and "the SDK works against vpay".
 - **`sdks/stripe-compat`** drives the official `stripe` package through this
   SDK's authenticator against a live compose stack, in CI's `e2e` job.
 - **`examples/merchant-node`** is written against a hypothetical
-  `api.vpay.example` and is not run against a stack by anything.
+  `api.vpay.example` and is not run against a stack by anything. Since
+  <Release /> its rail, number, amount and order come from environment
+  variables, so vpay's Notch Pay sandbox runbook can use it for its first
+  test-mode payment; that runbook is written and has not been run.
 - **Real sandbox evidence:** over seven MTN sandbox payments succeeded on
   2026-09-15. A documented sandbox run minted a payment with
   `examples/checkout-browser/mint.mjs` through this SDK

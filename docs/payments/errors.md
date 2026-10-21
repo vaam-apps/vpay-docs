@@ -128,7 +128,11 @@ flowchart TD
   the API or the worker.
 - **Tier 3, boundaries.** The HTTP envelope, the worker's retry decision, the
   log level and the process exit code are each read off the classification.
-  `anyhow` appears only here, in the binaries.
+  `anyhow` appears only here, in the binaries. At startup, `vpay-server` looks
+  for four leaves in the chain, in order: its own `StartupError` (a required
+  flag missing or unusable), `ConfigError`, `SigningKeyError` (the RS256 key
+  file), then `DbError` last, so a config naming a dead database is still a
+  config problem. The first three all exit `78`.
 
 Some leaf classifications worth knowing: `DbError::UniqueViolation` is
 `Conflict`/`resource_conflict` ("you already did this"), not `invalid_state`;
@@ -152,15 +156,15 @@ prevent.
 
 ## Status in this release
 
-| Part                                     | Status                 | Evidence                                                                                                                                          |
-| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Category`, `Classify`, the policy table | <Status s="built" />   | Invariant tests over every category, plus a literal transcription of the table                                                                    |
-| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `401`, `403`, `404`, `409`, `502`, `503` through it                                                              |
-| `JobError::decision` in the worker       | <Status s="built" />   | Consumed by `vpay_worker::run_loop`                                                                                                               |
-| Exit codes from the category             | <Status s="built" />   | Both binaries exit with `Category::exit_code()`                                                                                                   |
-| `verify-errors` gate                     | <Status s="built" />   | In `just verify` and CI                                                                                                                           |
-| Rail-produced codes against real rails   | <Status s="partial" /> | `charge_declined` and `502` have only ever come from WireMock hosts                                                                               |
-| `501` for an unbuilt rail operation      | <Status s="built" />   | `POST /v1/refunds` against an `orange_money` charge, and no other `/v1` call — `orange_money::refund` is the one remaining `NotImplemented` token |
+| Part                                     | Status                 | Evidence                                                                                                                                                                                                                                                    |
+| ---------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Category`, `Classify`, the policy table | <Status s="built" />   | Invariant tests over every category, plus a literal transcription of the table                                                                                                                                                                              |
+| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `401`, `403`, `404`, `409`, `502`, `503` through it                                                                                                                                                                        |
+| `JobError::decision` in the worker       | <Status s="built" />   | Consumed by `vpay_worker::run_loop`                                                                                                                                                                                                                         |
+| Exit codes from the category             | <Status s="built" />   | Every mode of `vpay-server` exits with `Category::exit_code()`                                                                                                                                                                                              |
+| `verify-errors` gate                     | <Status s="built" />   | In `just verify` and CI                                                                                                                                                                                                                                     |
+| Rail-produced codes against real rails   | <Status s="partial" /> | `charge_declined` and `502` have only ever come from WireMock hosts                                                                                                                                                                                         |
+| `501` for an unbuilt rail operation      | <Status s="built" />   | `POST /v1/refunds` against an `orange_money` or a `notchpay` charge, and no other `/v1` call — `orange_money::refund` and `notchpay::refund` are the two `NotImplemented` tokens. A `destination` sent to `notchpay` is a `400` before the token is reached |
 
 The full record is the **Status** section of
 [the errors flow](vpay:docs/flows/errors.md#status).

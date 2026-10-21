@@ -11,6 +11,8 @@ sources:
   - docs/flows/merchant-auth/resource-contract.md
   - docs/status/backend.md
   - docs/rfc/0003-refunds-destinations-and-the-first-ledger-postings.md
+  - docs/adr/0024-customer-filters-and-manual-payments.md
+  - docs/adr/0025-session-customer-onto-intent.md
 skills:
   - vpay-merchant-api
   - vpay-payments
@@ -50,7 +52,8 @@ a security bug.
 its own 404 fallback and CORS, and exactly one route that is not a `GET`.
 `/dash/v1` is mounted only on a deployment configured for the staff surface, and
 — like everything else — has never run in a deployment. The provider callback
-route is proven against WireMock and has never been called by MTN or Orange.
+route is proven against WireMock and has never been called by MTN, Orange or
+Notch Pay.
 
 ![vpay system overview: merchant, vpay-server serve and worker, Postgres, rails, checkout, dashboard and webhooks](/images/architecture.svg){.diagram}
 
@@ -89,6 +92,28 @@ without a token — so a route cannot be mounted without being covered.
 sends `POST`; `PATCH` sits beside it because a partial update is what the verb
 means. There is no collection `GET` on `/v1/invoice_items` — an invoice's lines
 are read from the invoice.
+
+### Filtering a list by customer
+
+`GET /v1/payment_intents`, `GET /v1/checkout/sessions` and `GET /v1/refunds`
+accept `customer=cus_…` since vpay 0.6.0
+([ADR-0024](vpay:docs/adr/0024-customer-filters-and-manual-payments.md)). The
+value is checked for shape only: another merchant's customer, an unknown one and
+one of yours with no rows all answer the same `200` with an empty page, never a
+`404`, and a malformed value is a `400` naming `customer`. The cursors page
+inside the filtered set. What each list compares:
+
+- **payment intents:** their own `customer`;
+- **checkout sessions:** their **own** `customer`, the one the page renders;
+- **refunds:** their intent's `customer`, because a refund has none.
+
+A session that names a customer on an intent with none now writes that customer
+onto the intent in the same transaction
+([ADR-0025](vpay:docs/adr/0025-session-customer-onto-intent.md)), so for
+sessions created from vpay 0.6.0 on the three lists agree. Older intents were
+not backfilled: a payment collected through such a session is listed by the
+sessions filter and not by the other two. A server older than 0.6.0 ignores
+`customer` and returns the whole list.
 
 ```mermaid
 flowchart LR
@@ -226,10 +251,14 @@ instructed the rail. It does **not** mean money moved:
   called — it is WireMock-proven only;
 - `orange_money::refund` is a declared `NotImplemented` token, which fails the
   refund, releases its reservation and answers `501` `not_implemented` — the
-  only place on `/v1` a caller can receive that code.
+  only route on `/v1` where a caller can receive that code;
+- `notchpay::refund` is a declared `NotImplemented` token too, so a refund on a
+  Notch Pay charge also answers `501`.
 
-`destination[<payment_method_type>][msisdn]` is required on both rails (a
-mobile-money refund is an outbound transfer and needs a payee), and
+`destination[<payment_method_type>][msisdn]` is required on MTN and Orange (a
+refund there is an outbound transfer and needs a payee). Notch Pay refunds to
+the instrument that paid, so a `destination` sent for it is a `400` naming
+`destination`, before the token is reached. And
 `POST /v1/refunds/{id}/cancel` in practice refuses every refund the create route
 produces, because the rail has already been handed the transfer by the time you
 hold the `re_…`.

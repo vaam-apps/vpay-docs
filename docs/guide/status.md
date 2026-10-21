@@ -13,6 +13,7 @@ sources:
   - docs/status/frontend.md
   - docs/status/infrastructure.md
   - docs/status/mobile-tauri-plugin.md
+  - docs/status/providers.md
 skills:
   - vpay-docs-status
   - vpay
@@ -38,9 +39,10 @@ during testing on 2026-09-15. The first recorded intent,
 `pi_xxd2xj1e914e16c6m63gezag`, reached `succeeded` after the worker's
 authenticated status query reported its charge paid.
 
-The maintainer who performed the tests confirmed the corrected count on
-2026-10-20. This corrects the historical testing evidence summarized here; it
-does not describe a new test run or change the release pinned by these pages.
+Valantine Suh (@Valsuh45), who performed the tests, confirmed the corrected
+count on 2026-10-20; vpay's record had reported one payment, and until later the
+same day it named the maintainer as the tester. This corrects the historical
+testing evidence summarized here; it does not describe a new test run.
 
 The limits remain:
 
@@ -51,11 +53,12 @@ Concretely:
 
 - The payer number was an MTN-sandbox test MSISDN that the sandbox settles by
   itself. No handset was prompted and **no money moved**.
-- **Orange's redirect rail has never been called.**
+- **Orange's redirect rail has never been called**, and neither has
+  [Notch Pay](/rails/notchpay), the rail added in <Release />.
 - **No webhook has ever reached a merchant endpoint** outside the repository.
 - **No rail has ever refunded anything.** MTN's Disbursements product, which is
   what an MTN refund is, has never been called. `orange_money::refund` is
-  `NotImplemented`.
+  `NotImplemented`, and so is `notchpay::refund`.
 - **No cluster has ever run vpay.**
 
 ```mermaid
@@ -64,11 +67,13 @@ flowchart TD
     Q --> A["MTN MoMo charge<br/>(submit + status query)"]
     Q --> B["MTN MoMo refund<br/>(Disbursements transfer)"]
     Q --> C["Orange Money<br/>(every call)"]
+    Q --> N["Notch Pay<br/>(every call)"]
     Q --> D["Rail callback<br/>POST /provider/{code}/callback"]
     Q --> E["Webhook to a merchant"]
     A --> A1["Over seven successful MTN sandbox payments,<br/>2026-09-15; test MSISDN, no money moved"]
     B --> B1["No: written, WireMock-proven,<br/>product never called"]
     C --> C1["No: WireMock only"]
+    N --> N1["No: WireMock only"]
     D --> D1["No: WireMock only"]
     E --> E1["No: receivers on the compose network only"]
 ```
@@ -86,6 +91,7 @@ broke.
 | **Adapter**: `mtn_momo` charge                             | <Status s="partial" />  | Wire calls proven against WireMock. Since 2026-09-15 the charge path is also proven against MTN's real sandbox                                                                                                                                                                                                                    | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
 | **Adapter**: `mtn_momo` refund                             | <Status s="unproven" /> | The Disbursements `transfer` call is written and WireMock-proven. It has never been called, and no real Disbursements credential exists in the project                                                                                                                                                                            | [status.md](vpay:docs/status.md)                                                                                                                       |
 | **Adapter**: `orange_money`                                | <Status s="unproven" /> | Wire calls proven against WireMock. Never called                                                                                                                                                                                                                                                                                  | [status/backend.md](vpay:docs/status/backend.md)                                                                                                       |
+| **Adapter**: `notchpay`                                    | <Status s="unproven" /> | New in <Release />, admitted under ADR-0031. Proven only against a WireMock stub transcribed from Notch Pay's documentation. Never called, and every boot logs its public-key exposure                                                                                                                                            | [status/providers.md](vpay:docs/status/providers.md)                                                                                                   |
 | **Frontend**: checkout page, dashboard, demo shop          | <Status s="partial" />  | Built, and walked by a real browser against a stub rail                                                                                                                                                                                                                                                                           | [status/frontend.md](vpay:docs/status/frontend.md)                                                                                                     |
 | **Infrastructure**: images, compose, Helm, migrations      | <Status s="partial" />  | Boots in compose and in CI. **No pod has ever run**                                                                                                                                                                                                                                                                               | [status/infrastructure.md](vpay:docs/status/infrastructure.md)                                                                                         |
 | **Data layer**: sqlx, CrateStack, the schema               | <Status s="partial" />  | `schemas/vpay.cstack` compiles into `vpay-db`. The drift between migrations and models is counted but not closed                                                                                                                                                                                                                  | [status/cratestack.md](vpay:docs/status/cratestack.md)                                                                                                 |
@@ -105,8 +111,11 @@ A few rows from the area pages show where the limits sit:
   signatures have been verified by both SDKs and by `stripe`'s `constructEvent`.
   Every receiver has been a container on the same compose network.
 - **The dashboard.** A staff member can sign in with a password and TOTP, and
-  read one merchant's payments in a browser, against the local stack. It has not
-  run in a deployment. `/dash/v1` has no write routes.
+  read one merchant's payments in a browser, against the local stack. Since vpay
+  0.8.0 they can also sign in through an OpenID Connect provider such as
+  Keycloak ([staff sign-in](/dashboard/authentication)); that path is built and
+  no browser has run its routes. It has not run in a deployment. `/dash/v1` has
+  no write routes.
 - **Infrastructure.** The Helm chart renders and is schema-validated, and images
   are built and signed by the release workflow. **Database backups, PITR and
   retention are not implemented**: no backup has ever been taken
@@ -150,11 +159,13 @@ vpay's second rule is that code which has not been written returns
 fails the build, and so does a declared token that no shipping code still
 carries.
 
-At <Release /> **exactly one** token is declared:
+At <Release /> **two** tokens are declared. It was one from 2026-09-15 until
+`notchpay::refund` joined it on 2026-10-20:
 
 | Token                  | What it means                                                                                                                                                                                                                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `orange_money::refund` | An Orange refund is an outbound **transfer** back to a payee (RFC-0003 § 5). The repository holds no Orange transfer specification, so writing the call would mean inventing an endpoint in the money path. The rail declares `supports_refunds: true`: the gap is vpay's, not Orange's. `supports_partial_refunds` stays `false` |
+| `notchpay::refund`     | Notch Pay documents refunds back to the payer in a guide, but its `POST /refunds` is absent from the specification and carries nothing that makes a replay safe, so a lost answer re-sent would pay twice. It stays a token until Notch Pay confirms a replay-safe refund in writing                                              |
 
 ::: warning A short list is the weakest claim, not the strongest
 A missing token only means that no function body is missing. It says nothing
@@ -169,12 +180,12 @@ must never invent one.
 
 ## Status in this release
 
-| Part                          | Status                   | Evidence                                                                              |
-| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
-| Taking a real payment         | <Status s="not-built" /> | The banner in `docs/status.md`: vpay cannot take a payment                            |
-| End to end against stub rails | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green          |
-| MTN sandbox charge            | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above |
-| Declared unimplemented paths  | <Status s="partial" />   | One token, `orange_money::refund`, gate-checked in both directions                    |
+| Part                          | Status                   | Evidence                                                                                   |
+| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------ |
+| Taking a real payment         | <Status s="not-built" /> | The banner in `docs/status.md`: vpay cannot take a payment                                 |
+| End to end against stub rails | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green               |
+| MTN sandbox charge            | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above      |
+| Declared unimplemented paths  | <Status s="partial" />   | Two tokens, `orange_money::refund` and `notchpay::refund`, gate-checked in both directions |
 
 The full record is in [`docs/status.md`](vpay:docs/status.md). Its history,
 verbatim and dated, is in [`docs/status/`](vpay:docs/status/README.md).
