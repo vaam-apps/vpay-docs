@@ -14,6 +14,8 @@ sources:
   - docs/flows/reconciler.md
   - docs/flows/webhooks.md
   - docs/status/backend.md
+  - docs/reference/vpay-worker.md
+  - docs/status/verification/2026-10-21-notchpay-step5.md
 skills:
   - vpay-payments
   - vpay-reconciler
@@ -125,8 +127,12 @@ late, missing or duplicated. So a callback **never changes state**.
 **identifiers only**, never a status, and enqueues a status query. The only
 thing that moves money is the **authenticated status query** vpay makes to the
 rail. `parse_callback` is synchronous on purpose: it cannot make a network call,
-so it cannot sneak a status in from the request. Full page:
-[Reconciler](/payments/reconciler).
+so it cannot sneak a status in from the request. A missed callback costs
+latency and nothing else, because the poll ladder queries the rail on its own
+schedule whether or not one arrives. MTN's own documentation says it sends a callback once and
+never retries it. No Orange source says either way. Notch Pay's reference asks
+for a `200` so that it does not retry, and vpay answers `202`; whether that
+counts is an open question. Full page: [Reconciler](/payments/reconciler).
 
 ::: warning Never received from a real rail
 The callback route is proven against WireMock. MTN, Orange and Notch Pay have
@@ -159,6 +165,15 @@ can act at different moments.
   URL. So vpay **commits the rail's `pay_token` before the redirect**. If the
   submit response is lost, no payment can have happened.
 
+vpay also writes an attempt row before it calls a rail, and recovery reads that
+row back. An answered `submit` row on a `submitting` charge means "the rail took
+it", so the row is marked answered only when that is true. A submit the rail
+**declined** fails the charge first, and only then is the row marked answered.
+A submit that ended in any other error, such as a `Malformed` answer, leaves the
+row unanswered, because the charge's fate is unknown and the next poll must ask
+the rail rather than move on. The API's confirm and the worker's resubmit both
+follow that order.
+
 Full page: [Crash safety](/payments/crash-safety).
 
 ## Idempotency keys
@@ -180,8 +195,8 @@ is **at least once, in no guaranteed order**, so receivers must dedupe by
 `event.id`. Full page: [Webhooks](/api/webhooks).
 
 ::: warning Never reached a merchant
-No merchant endpoint outside the repository has ever been POSTed to. Every
-receiver so far has been a container on a compose network.
+No delivery to a merchant endpoint outside the repository is on record. Every
+receiver on record is a container on a compose network.
 :::
 
 ## The reconciler
@@ -203,20 +218,23 @@ flowchart LR
 
 A late success, at minute 40 or at hour 30, is normal. The intent stayed
 `processing` the whole time, so it moves to `succeeded` and emits a plain
-`payment_intent.succeeded`. Full page: [Reconciler](/payments/reconciler).
+`payment_intent.succeeded`. A status read the adapter will not act on, such as a
+`complete` for less than the charge's amount, is refused as `Malformed` and
+settles nothing: the charge stays as it was and the polling goes on. Full page:
+[Reconciler](/payments/reconciler).
 
 ## Status in this release
 
-| Concept                        | Status                  | Evidence                                                                                                                              |
-| ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                        |
-| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                      |
-| Provider port and capabilities | <Status s="partial" />  | All three adapters pass the shared conformance suite, against WireMock containers                                                     |
-| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                               |
-| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                                   |
-| Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Rail evidence is WireMock plus over seven successful MTN sandbox payments |
-| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                            |
-| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                       |
+| Concept                        | Status                  | Evidence                                                                                                                                                                                                 |
+| ------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                                                                                           |
+| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                                                                                         |
+| Provider port and capabilities | <Status s="partial" />  | All three adapters pass the shared conformance suite, against WireMock containers. `mtn_momo` and `notchpay` have also met their rails' sandboxes through vpay, and `orange_money` has never been called |
+| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                                                                                                  |
+| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                                                                                                      |
+| Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Rail evidence is WireMock, over seven successful MTN sandbox payments and three Notch Pay sandbox payments                                   |
+| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                                                                                               |
+| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                                                                                          |
 
 Each concept's own page carries the full record. The index of vpay's flow
 documents is [`docs/flows/README.md`](vpay:docs/flows/README.md).

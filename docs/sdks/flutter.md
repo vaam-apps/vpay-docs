@@ -139,6 +139,18 @@ reverts all four copies; only the Dart one is caught by a test. `BrowserClient`
 refuses a non-`https` base URL unless you pass `allowInsecureBaseUrl: true` —
 needed for the plain-HTTP demo stack only.
 
+`BrowserClient` also refuses a malformed secret before any request. It takes the
+id out of a `pi_…_secret_…` or `cs_…_secret_…` and needs that prefix, something
+after it, and something after `_secret_`. A secret that fails — empty, `..`, `.`,
+`%2e%2e`, a bare prefix, an empty id, another object's prefix — comes back as a
+`VpayError` of type `invalid_request_error` with `param: 'clientSecret'`, not a
+throw, and nothing is sent. That check is the only thing keeping a dot segment
+out of a `/v1/browser` path, because `Uri.encodeComponent` leaves dots alone and
+`Uri.parse` resolves them; an id that passes it but carries `/../` stays one
+`%2F`-escaped segment. Four tests pin this on the three client methods that
+build a path, with a `MockClient` that records every request. They run by hand
+with the rest of the suite, because no CI job runs Flutter.
+
 ## App Store and Play policy
 
 The rule keys on **what is sold**, not on where the payment UI lives. Physical

@@ -120,32 +120,38 @@ the named test. It means a case exists that would fail if the capability broke.
 Counts are not given here on purpose — read the matrix itself. This is the shape
 of it at <Release />:
 
-| Area                                                                                                                                     | `sdks/rust`                                                               | `sdks/nodejs`                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `private_key_jwt` assertion and token exchange                                                                                           | ✅                                                                        | ✅, except real-OP conformance is not CI-gated ⛔                  |
-| Token cache, refresh margin, single-flight                                                                                               | ✅, but a non-`Bearer` `token_type` is accepted ⛔                        | ✅                                                                 |
-| One re-auth on `401`, replaying body and `Idempotency-Key`                                                                               | ✅                                                                        | ✅, but a second concurrent `401` can discard a fresh token ⛔     |
-| Retries beyond that single `401`                                                                                                         | ⛔ none, deliberately                                                     | ⛔ none, deliberately                                              |
-| `payment_intents`, `refunds`, `checkout.sessions`, `customers`, `invoices`, `invoice_items`, `account_holders`, `balance`, `events.list` | ✅                                                                        | ✅                                                                 |
-| `payment_intents.confirm` on `notchpay`, the second push rail                                                                            | ✅                                                                        | ✅                                                                 |
-| The `customer` list filter and `invoices.pay` out of band                                                                                | ✅                                                                        | ✅                                                                 |
-| An empty or all-dots path `id` refused before any request (v0.9.1)                                                                       | ✅                                                                        | ✅, but as a `TypeError`, not a `VpayError` ⛔                     |
-| `events.retrieve` (the route is served)                                                                                                  | ⛔                                                                        | ⛔                                                                 |
-| `request-id` surfaced, `stripe-should-retry` read                                                                                        | ⛔                                                                        | ⛔                                                                 |
-| Webhook verification                                                                                                                     | ✅                                                                        | ✅, but a verified-but-undecodable body is not a distinct error ⛔ |
-| `client_secret` kept out of diagnostic output                                                                                            | ✅                                                                        | ⛔ on `PaymentIntent`; ✅ on Checkout Sessions                     |
-| An authenticator for the official Stripe SDK                                                                                             | ⛔ `async-stripe` has no per-request hook                                 | ✅                                                                 |
-| Exercised against a running vpay                                                                                                         | ✅ refunds and invoices; ⛔ checkout sessions, customers, account holders | same as Rust                                                       |
+| Area                                                                                                                                     | `sdks/rust`                                                               | `sdks/nodejs`                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `private_key_jwt` assertion and token exchange                                                                                           | ✅                                                                        | ✅, except real-OP conformance is not CI-gated ⛔                     |
+| Token cache, refresh margin, single-flight                                                                                               | ✅, but a non-`Bearer` `token_type` is accepted ⛔                        | ✅                                                                    |
+| One re-auth on `401`, replaying body and `Idempotency-Key`                                                                               | ✅                                                                        | ✅, but a second concurrent `401` can discard a fresh token ⛔        |
+| Retries beyond that single `401`                                                                                                         | ⛔ none, deliberately                                                     | ⛔ none, deliberately                                                 |
+| `payment_intents`, `refunds`, `checkout.sessions`, `customers`, `invoices`, `invoice_items`, `account_holders`, `balance`, `events.list` | ✅                                                                        | ✅                                                                    |
+| `payment_intents.confirm` on `notchpay`, the second push rail                                                                            | ✅                                                                        | ✅                                                                    |
+| The `customer` list filter and `invoices.pay` out of band                                                                                | ✅                                                                        | ✅                                                                    |
+| An empty or all-dots path `id` refused before any request (v0.9.1)                                                                       | ✅                                                                        | ✅                                                                    |
+| Every local refusal is the SDK's own error type, caught with the rest                                                                    | ✅ `Error::InvalidParams`                                                 | ✅ `VpayInvalidParamsError` since v0.10.0 (a bare `TypeError` before) |
+| `events.retrieve` (the route is served)                                                                                                  | ⛔                                                                        | ⛔                                                                    |
+| `request-id` surfaced, `stripe-should-retry` read                                                                                        | ⛔                                                                        | ⛔                                                                    |
+| Webhook verification                                                                                                                     | ✅                                                                        | ✅, but a verified-but-undecodable body is not a distinct error ⛔    |
+| `client_secret` kept out of diagnostic output                                                                                            | ✅                                                                        | ⛔ on `PaymentIntent`; ✅ on Checkout Sessions                        |
+| An authenticator for the official Stripe SDK                                                                                             | ⛔ `async-stripe` has no per-request hook                                 | ✅                                                                    |
+| Exercised against a running vpay                                                                                                         | ✅ refunds and invoices; ⛔ checkout sessions, customers, account holders | same as Rust                                                          |
 
 "Against a running vpay" means the SDK's live suites, which drive a real
 `vpay-server` over a socket — whose rails are still WireMock. The real-rail
-evidence comes from the MTN **sandbox** testing on 2026-09-15, when over seven
-payments succeeded. A documented sandbox run minted a payment with
+evidence comes from two sandboxes. MTN's, on 2026-09-15, when over seven
+payments succeeded: a documented sandbox run minted a payment with
 `examples/checkout-browser/mint.mjs` through the Node SDK and confirmed it in
 the browser through `vpay-stripe-js`
-([live sandbox test](/operate/runbooks#live-sandbox-test)). The matrix also has
-its own tables for the browser client, the Flutter plugin and the Tauri plugin;
-see their pages.
+([live sandbox test](/operate/runbooks#live-sandbox-test)). And Notch Pay's, on
+2026-10-21, when `examples/merchant-node` took three test-mode payments through
+the Node SDK to a local vpay whose `notchpay` adapter called Notch Pay: one
+succeeded, one failed, one stayed `pending`
+([Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)).
+Neither is production, and the Notch Pay run used no payer-side client. The
+matrix also has its own tables for the browser client, the Flutter plugin and
+the Tauri plugin; see their pages.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:
@@ -157,13 +163,13 @@ in vpay, not a parity gap.
 
 ## Status in this release
 
-| Part                                        | Status                  | Evidence                                                                                                                                                        |
-| ------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                |
-| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                   |
-| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                        |
-| Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate |
-| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js` — no other rail, no production         |
+| Part                                        | Status                  | Evidence                                                                                                                                                                                                                              |
+| ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                                                                                      |
+| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                                                                                         |
+| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                                                                                              |
+| Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate                                                                       |
+| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js`. On 2026-10-21 the Node SDK took three Notch Pay sandbox payments through vpay. No other rail, no production |
 
 See [docs/status.md](vpay:docs/status.md) for the repository-wide picture and
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md#gap-ledger) for every open gap.

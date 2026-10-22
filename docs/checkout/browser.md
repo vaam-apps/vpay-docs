@@ -176,6 +176,18 @@ a compile error on the merchant's page rather than a surprise at the till. The
 exact type-compatibility claims are compile-time assertions in the package's
 `src/compat.test.ts`; see [Stripe compatibility](/api/stripe-compat).
 
+**A `client_secret` that is not vpay's is refused before it reaches a path.** Every id the
+package puts in a path comes out of a `pi_…_secret_…` or `cs_…_secret_…`, and
+the client requires that prefix, something after it, and something after
+`_secret_`. A secret that fails — empty, `..`, `.`, `%2e%2e`, a bare prefix —
+comes back as an `invalid_request_error` result with `param: "clientSecret"`
+and nothing is sent; `initEmbeddedCheckout` rejects and mounts no frame. This
+matters because `encodeURIComponent` leaves dots alone and a URL parser resolves
+them, so `..` would otherwise address `/v1/browser/`. An id that passes the
+check but carries `/../` stays one percent-encoded segment, in the API routes
+and in the frame's `/e/{id}`. The tests assert this against a stub server and
+jsdom, not a real browser.
+
 ### Redirect rails
 
 `confirmPayment` follows Stripe.js's rule: when the rail answers with
@@ -277,15 +289,15 @@ opens a real popup.
 
 ## Status in this release
 
-| Part                                               | Status                   | Evidence                                                                                                                                                                                                          |
-| -------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/v1/browser` routes, uniform `404`, CORS, secrets | <Status s="built" />     | `backends/tests/integration/tests/browser_checkout.rs` — real Postgres, WireMock MTN, shipping router                                                                                                             |
-| `@vaam-apps/vpay-stripe-js`                        | <Status s="partial" />   | Vitest suite against a real `node:http` stub of `/v1/browser`; published on npm since 2026-09-19                                                                                                                  |
-| `examples/checkout-browser` in a real browser      | <Status s="partial" />   | `checkout.cy.ts` against the compose stack, MTN push only                                                                                                                                                         |
-| Redirect return trip via a checkout session        | <Status s="partial" />   | Driven in `shop-hosted.cy.ts` — against a WireMock stub of Orange's page                                                                                                                                          |
-| Popup mode                                         | <Status s="unproven" />  | Stub windows only                                                                                                                                                                                                 |
-| Rate limiting                                      | <Status s="not-built" /> | An operational requirement at the ingress                                                                                                                                                                         |
-| A real rail                                        | <Status s="partial" />   | Every automated test uses WireMock rails. On 2026-09-15 vpay's live-sandbox runbook drove `examples/checkout-browser` through an EUR MTN payment against MTN's real **sandbox**; no other rail, and no production |
+| Part                                               | Status                   | Evidence                                                                                                                                                                                                                                   |
+| -------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/v1/browser` routes, uniform `404`, CORS, secrets | <Status s="built" />     | `backends/tests/integration/tests/browser_checkout.rs` — real Postgres, WireMock MTN, shipping router                                                                                                                                      |
+| `@vaam-apps/vpay-stripe-js`                        | <Status s="partial" />   | Vitest suite against a real `node:http` stub of `/v1/browser`; published on npm since 2026-09-19                                                                                                                                           |
+| `examples/checkout-browser` in a real browser      | <Status s="partial" />   | `checkout.cy.ts` against the compose stack, MTN push only                                                                                                                                                                                  |
+| Redirect return trip via a checkout session        | <Status s="partial" />   | Driven in `shop-hosted.cy.ts` — against a WireMock stub of Orange's page                                                                                                                                                                   |
+| Popup mode                                         | <Status s="unproven" />  | Stub windows only                                                                                                                                                                                                                          |
+| Rate limiting                                      | <Status s="not-built" /> | An operational requirement at the ingress                                                                                                                                                                                                  |
+| A real rail                                        | <Status s="partial" />   | Every automated test uses WireMock rails. On 2026-09-15 vpay's live-sandbox runbook drove `examples/checkout-browser` through an EUR MTN payment against MTN's real **sandbox**; this client has met no other real rail, and no production |
 
 Nothing on this page has taken real money: the sandbox's test number settles
 by itself, and no handset was prompted. The live-sandbox walk is described on

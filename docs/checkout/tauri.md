@@ -61,7 +61,9 @@ The hosts decide nothing. Each one opens a window and later reports exactly
 TypeScript rather than Rust because the web has no Rust, and one tested
 implementation beats two (ADR-0023, T1). For the two API reads it reuses
 [`@vaam-apps/vpay-stripe-js`](/checkout/browser)'s client rather than writing a
-second one (T3).
+second one (T3). So the package builds no `/v1/browser` path of its own: the
+client's refusal of a secret whose id is empty or only dots covers it, and the
+Rust, Kotlin and Swift hosts only open the URL they are given.
 
 ## The two rules
 

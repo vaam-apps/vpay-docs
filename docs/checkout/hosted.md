@@ -13,6 +13,8 @@ sources:
   - docs/runbooks/checkout.md
   - frontends/apps/checkout/src/lib/machine.ts
   - frontends/apps/checkout/src/components
+  - frontends/apps/checkout/package.json
+  - frontends/apps/checkout/app/globals.css
 skills:
   - vpay-checkout
   - vpay-frontend
@@ -250,9 +252,12 @@ stateDiagram-v2
 
 ### The screens, as vpay renders them
 
-These are screenshots of vpay's own checkout components, captured at v0.4.1 from
-the checkout app's Storybook (`frontends/apps/checkout`, story file
-`checkout-screens.stories.tsx`). The data is the repository's test fixture: a 5
+These are screenshots of vpay's own checkout components, captured at v0.10.2
+from the checkout app's Storybook (`frontends/apps/checkout`, story file
+`checkout-screens.stories.tsx`), in headless Chrome on macOS at twice the pixel
+density. The page loads no web font, so its text is drawn in the device's own
+face, and the busy indicator is a shape that morphs as it turns, caught here at
+its first frame. The data is the repository's test fixture: a 5
 000 FCFA session for "Boutique Test", with reference
 `cs_test_fixture000000000001`. It is the same set of states
 `checkout-view.test.tsx` asserts against, and that vpay's Storybook
@@ -269,7 +274,7 @@ screens are shown in English.
     <figcaption><code>collect_msisdn</code>: the MTN number, before confirm</figcaption>
   </figure>
   <figure class="shot">
-    <img src="/images/checkout/waiting-for-the-payer.png" alt="Checkout page in French headed 'Consultez votre téléphone': approve 5 000 FCFA on your handset; the page updates itself. A spinner." loading="lazy" />
+    <img src="/images/checkout/waiting-for-the-payer.png" alt="Checkout page in French headed 'Consultez votre téléphone': approve 5 000 FCFA on your handset; the page updates itself. A loading indicator." loading="lazy" />
     <figcaption><code>waiting</code>: the payer approves on their handset</figcaption>
   </figure>
   <figure class="shot">
@@ -277,7 +282,7 @@ screens are shown in English.
     <figcaption><code>ready_redirect</code>: Orange, before the hand-off</figcaption>
   </figure>
   <figure class="shot">
-    <img src="/images/checkout/redirecting-to-the-rail.png" alt="Checkout page in French headed 'Redirection vers Orange Money': you will come back here once the payment is made. A spinner." loading="lazy" />
+    <img src="/images/checkout/redirecting-to-the-rail.png" alt="Checkout page in French headed 'Redirection vers Orange Money': you will come back here once the payment is made. A loading indicator." loading="lazy" />
     <figcaption><code>redirecting</code>: leaving for the rail's page</figcaption>
   </figure>
   <figure class="shot">
@@ -297,9 +302,10 @@ screens are shown in English.
 ::: info What these screenshots are, and what they are not
 They are vpay's real components, rendered with fixture state. They are **not** a
 capture of a live payment. No rail answered behind them, and at <Release /> no
-real payer has seen any of these screens. The checkout components are among
-this page's sources, so a release that changes them marks the page stale and
-the screenshots due for a retake.
+real payer is on record as having seen any of these screens. The checkout
+components, the checkout app's manifest (which pins the UI package) and its
+stylesheet are among this page's sources, so a release that changes any of them
+marks the page stale and the screenshots due for a retake.
 :::
 
 A few properties worth knowing:

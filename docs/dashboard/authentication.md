@@ -30,10 +30,11 @@ then runs an OAuth authorization-code grant with PKCE against vpay's
 **in-process** OpenID Provider and receives a short-lived `/dash/v1` access
 token — which it never shows to the browser. `/dash/v1` accepts no merchant API
 key, and its tokens never come from an external provider: only the human step
-can federate. Password and TOTP sign-in is built and tested end to end against a
-real server and a real browser; single sign-on is tested against a real Keycloak
-but no browser has run its dashboard routes. Neither has run in a deployment,
-and signing keys have never been rotated.
+can federate. A completed sign-in ends on the Overview, `/overview`. Password and
+TOTP sign-in is built and tested end to end against a real server and a real
+browser; single sign-on is tested against a real Keycloak but no browser has run
+its dashboard routes. No deployment of either is on record, and signing keys have
+never been rotated.
 
 Agents working on this should load [vpay-dashboard](skill:vpay-dashboard).
 
@@ -88,13 +89,21 @@ sequenceDiagram
     D->>V: POST /dash/v1/oauth/token with code and code_verifier
     Note over V: PKCE S256, token stored in the session row
     V-->>D: access token, aud = dashboard client_id, vpay_merchant_id claim
-    B->>D: open /payments
+    D-->>B: redirect to /overview
+    B->>D: open /overview
     D->>V: GET /dash/v1/staff/session (X-Vpay-Staff-Session)
     V-->>D: who is signed in, the token and its expiry
-    D->>V: GET /dash/v1/payment_intents (Bearer)
-    V-->>D: this merchant's rows
+    D->>V: POST /dash/v1/$procs/search... (Bearer)
+    V-->>D: this merchant's counts and latest payments
     D-->>B: rendered page, no token in it
 ```
+
+The three sign-in screens, `/login`, `/login/totp` and `/login/password`, are
+one centred card under the vpay mark, with a light and dark button in the corner
+and no navigation rail. The step that finishes a sign-in sends the browser to
+`/overview`: the second factor when no password change is owed, the password
+change, or the single sign-on callback. A browser that opens one of the three
+screens while already fully signed in is sent there too.
 
 **The dashboard's server follows the `302` itself.** In a browser-driven flow a
 callback page would complete the exchange; here the app's own server requests
@@ -150,7 +159,7 @@ sequenceDiagram
     Note over V: signature, iss, aud, azp, exp, iat, nonce, then group, then second factor
     V-->>D: authenticated session
     D->>V: authorization-code leg, unchanged
-    D-->>B: 303 /payments
+    D-->>B: 303 /overview
 ```
 
 What vpay checks, in order:
@@ -212,7 +221,9 @@ stateDiagram-v2
     refused --> [*]
 ```
 
-**Signing out deletes the row.** Because the access token lives in that row, the
+**Signing out deletes the row.** The Sign out button is a form post, never a
+link, in the account block of the navigation rail and, from 640 to 1279 pixels
+wide, in the top app bar. Because the access token lives in that row, the
 dashboard's server can no longer obtain it, and any unexchanged authorization
 code the session issued dies with it by cascade. What sign-out cannot do is
 invalidate the JWT itself: it stays cryptographically valid for the rest of its
@@ -225,6 +236,11 @@ leg again on the live session — which re-checks that the staff member is still
 active, still bound to this merchant, and owes no password change. A `401` on a
 read is retried once after a re-mint; a `403` never is. Disabling a staff member
 or moving them to another merchant takes effect on their **next request**.
+
+Every signed-in page runs this gate on the server before it reads anything, and
+the shell around the pages runs it too. The two share one session read per
+render, so a full render costs one read and at most one re-mint. Refine's own
+`authProvider.check()` makes no request: the server's gate is what decides.
 
 **Changing a password requires the current one** and deletes every other session
 of that staff member, keeping only the caller's.
@@ -311,7 +327,7 @@ the flag is read.
 | Part                                      | Status                   | Evidence                                                                                                                                                        |
 | ----------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Password, TOTP, sessions, PKCE grant      | <Status s="built" />     | `backends/tests/integration/tests/staff_sign_in.rs` drives the real router on a real socket over real Postgres and mints no token of its own                    |
-| Sign-in in a real browser                 | <Status s="built" />     | `dashboard.cy.ts` enrols from the QR the screen displayed, changes the password, exchanges the code, signs out                                                  |
+| Sign-in in a real browser                 | <Status s="built" />     | `dashboard.cy.ts` enrols from the QR the screen displayed, changes the password, exchanges the code, lands on `/overview`, signs out, signs back in             |
 | Shared rate-limit budget, trusted proxies | <Status s="built" />     | Two vpay servers over one Postgres read `429` on the sixth attempt against a budget of five                                                                     |
 | Admin cross-tenant reads                  | <Status s="built" />     | `dashboard_read_surface.rs` cases for admin, non-admin and write refusal                                                                                        |
 | Sweep of expired sessions and codes       | <Status s="not-built" /> | Expired rows are refused on read and never deleted on a schedule                                                                                                |
@@ -320,7 +336,7 @@ the flag is read.
 | Single sign-on through Keycloak           | <Status s="partial" />   | `staff_sso.rs` against a simulated provider and `staff_sso_keycloak.rs` against a real Keycloak 26.6.1 container; no browser has run the dashboard's SSO routes |
 | Linking an existing member to SSO         | <Status s="not-built" /> | Members come only from a first SSO sign-in                                                                                                                      |
 | Other credential kinds                    | <Status s="not-built" /> | `hotp`, `magic_link`, `email_otp`, `phone_otp`, `webauthn`: declared in the schema, no verifier                                                                 |
-| Running in a deployment                   | <Status s="not-built" /> | No Kubernetes pod has ever run the dashboard or its backend tier                                                                                                |
+| Running in a deployment                   | <Status s="not-built" /> | No pod running the dashboard or its backend tier is on record                                                                                                   |
 
 The full record is
 [dashboard-auth.md § Status](vpay:docs/flows/dashboard-auth.md#status).

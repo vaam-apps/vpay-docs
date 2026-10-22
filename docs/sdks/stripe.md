@@ -147,6 +147,20 @@ publishable key, and there is no `console` call in its shipping source.
 `loadStripe` and `initEmbeddedCheckout` are the two that _do_ reject, on
 integration mistakes visible at first page load.
 
+**A `client_secret` that is not vpay's is refused before any request.** The
+client takes the object's id out of a `pi_…_secret_…` (an intent) or
+`cs_…_secret_…` (a session) and needs that prefix, something after it, and
+something after `_secret_`. A secret that fails that — empty, `..`, `.`,
+`%2e%2e`, a bare `pi_`, another object's prefix — comes back as
+`{ error: { type: "invalid_request_error", param: "clientSecret" } }` and
+nothing is sent; `initEmbeddedCheckout` rejects with a `TypeError` and builds no
+frame. That check is what keeps a dot segment out of every path the package
+builds: `encodeURIComponent` leaves dots alone, and the URL parser resolves
+them before the request leaves. An id that passes the check but carries `/../`
+stays one percent-encoded segment. Tests drive sixteen such secrets through
+every method that builds a path and assert the stub saw no request; they do not
+run against a real browser or a running vpay.
+
 ## `sdks/stripe-compat`: the official `stripe` package, against a real stack {#stripe-compat}
 
 This suite takes the official `stripe` package — the one a merchant already has

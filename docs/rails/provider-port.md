@@ -227,9 +227,18 @@ sequenceDiagram
 ```
 
 The route answers the same `202` for a reference it does not recognise as for
-one it does, so it is not an oracle for "does this charge exist", and a rail
-does not retry forever. A body the adapter cannot parse is a `400`; an unknown
-rail code is a `404`.
+one it does, so it is not an oracle for "does this charge exist". That is the
+whole reason, and it does not lean on any rail retrying: MTN's own documentation
+says it sends a callback once, has no retry mechanism and recommends polling; no
+official Orange source says either way; and Notch Pay's reference asks for a
+`200` so that it does not retry, so whether vpay's `202` counts as delivered
+there is an open question
+([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md) § 12, item
+12). A callback a rail sends and vpay misses costs latency, because the poll
+ladder reads the charge anyway. A body the adapter cannot parse is a `400`; an
+unknown rail code is a `404`. The route mounts `POST` only, and whether MTN
+sends its callbacks as `POST` or `PUT` is open (see
+[MTN MoMo](/rails/mtn-momo)).
 
 ::: warning The callback route has no rate limit
 A job already due within ten seconds (the poll ladder's first rung) is left
@@ -297,29 +306,33 @@ reconciler", the port leaked.
   labelled by `error_kind`, and which kind dominates decides what is wrong:
   `provider_unavailable` is transport, `charge_declined` is ordinary rail
   decisions, `provider_error` is a rail string the adapter's table does not know
-  (mapping drift), `misconfigured` is our YAML or credentials. The alert and its
-  threshold are provisional and have never been evaluated against real series —
-  see the
+  (mapping drift) or an answer the adapter refused to act on, `misconfigured` is
+  our YAML or credentials. The alert and its threshold are provisional and have
+  never been evaluated against real series — see the
   [provider error-rate runbook](vpay:docs/runbooks/provider-error-rate.md) and
-  [Runbooks](/operate/runbooks).
+  [Runbooks](/operate/runbooks). In the `provider_requests` rows the worker
+  writes, a status read the adapter refused is recorded as answered
+  (`status_code` 0, `error_kind` `provider_error`), because the rail did answer
+  it; a refused `submit` is deliberately left unanswered (`status_code` null),
+  because the charge's fate is then unknown.
 - **Widening a mapping to swallow an unknown string** is worse than an honest
   `provider_error`, because it tells a merchant something false about whether to
   retry.
 
 ## Status in this release
 
-| Part                                             | Status                   | Evidence                                                                                                                                         |
-| ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The trait, capabilities and `Measured` decorator | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                      |
-| Shared conformance suite over all three rails    | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                 |
-| Callback route as a hint                         | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit                                                                                     |
-| Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                     |
-| MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                              |
-| Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                      |
-| Notch Pay over the port                          | <Status s="unproven" />  | WireMock only; the adapter has never called Notch Pay. Its sandbox answered a probe on 2026-10-21. See [Notch Pay](/rails/notchpay)              |
-| `accepted_exposure` and its boot warning         | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                       |
-| `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read |
-| 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                           |
+| Part                                             | Status                   | Evidence                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The trait, capabilities and `Measured` decorator | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                                      |
+| Shared conformance suite over all three rails    | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                                 |
+| Callback route as a hint                         | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit. MTN's HTTP method and whether Orange's body carries `order_id` are open                            |
+| Orange `notif_token` comparison on callbacks     | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                                     |
+| MTN charge path over the port                    | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                                              |
+| Orange over the port                             | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                                      |
+| Notch Pay over the port                          | <Status s="partial" />   | Three payments through the adapter against Notch Pay's real sandbox on 2026-10-21; WireMock otherwise; production never called. See [Notch Pay](/rails/notchpay) |
+| `accepted_exposure` and its boot warning         | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                                       |
+| `refund` through the port                        | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read                 |
+| 401 → re-mint → retry                            | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                                           |
 
 The full, dated record is in vpay's
 [provider-port flow § Status](vpay:docs/flows/provider-port.md#status).

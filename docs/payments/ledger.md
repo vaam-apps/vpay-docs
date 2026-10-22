@@ -6,6 +6,7 @@ description:
 status: partial
 sources:
   - docs/flows/ledger.md
+  - docs/status/verification/2026-10-21-notchpay-step5.md
 skills:
   - vpay-payments
   - vpay-data-layer
@@ -19,8 +20,10 @@ balance. It is separate from the operational tables (`payment_intents`,
 `charges`, `refunds`) on purpose — a ledger must not change when an operational
 row does. This page explains the accounts, what gets posted when, and exactly
 how much of it is live at <Release />: the writer exists and is wired into
-settlement, but **no deployment has ever produced a ledger row**, because no
-deployment has ever taken a payment.
+settlement. Outside the tests, the one posting on record is a 210 XAF capture
+for a test-mode payment in Notch Pay's sandbox, on a maintainer's machine. **No
+deployment is on record as having produced a ledger row**, because none is on
+record as having taken a payment.
 
 Agents working on this should load [vpay-payments](skill:vpay-payments).
 
@@ -149,15 +152,15 @@ And no rail reports a refund fee to vpay today, so the column is never written.
 
 ## Status in this release
 
-| Part                                       | Status                   | Evidence                                                                                         |
-| ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| Double-entry validation (invariant 1)      | <Status s="built" />     | `a_capture_with_a_fee_balances`, `an_unbalanced_transaction_is_rejected`, per-currency cases     |
-| Capture posting in settlement              | <Status s="partial" />   | `a_settled_charge_posts_its_capture_in_the_same_transaction` — no deployment has a ledger row    |
-| Per-merchant payable balance (invariant 2) | <Status s="partial" />   | Computable in Rust and SQL; `two_merchants_payable_balances_do_not_mix`; nothing schedules it    |
-| Over-refund CHECK                          | <Status s="built" />     | Reached by `POST /v1/refunds`; `two_concurrent_refunds_race_and_the_database_refuses_the_second` |
-| Refund posting                             | <Status s="not-built" /> | Written, but nothing settles a `pending` refund — no refund poll ladder                          |
-| Platform fee at capture                    | <Status s="not-built" /> | No column, no configuration                                                                      |
-| Nightly invariant checks                   | <Status s="not-built" /> | No scheduled job exists                                                                          |
+| Part                                       | Status                   | Evidence                                                                                                                                                                                                   |
+| ------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Double-entry validation (invariant 1)      | <Status s="built" />     | `a_capture_with_a_fee_balances`, `an_unbalanced_transaction_is_rejected`, per-currency cases                                                                                                               |
+| Capture posting in settlement              | <Status s="partial" />   | `a_settled_charge_posts_its_capture_in_the_same_transaction`; the one posting on record outside the tests is a 210 XAF sandbox capture on a maintainer's machine. No deployment has a ledger row on record |
+| Per-merchant payable balance (invariant 2) | <Status s="partial" />   | Computable in Rust and SQL; `two_merchants_payable_balances_do_not_mix`; nothing schedules it                                                                                                              |
+| Over-refund CHECK                          | <Status s="built" />     | Reached by `POST /v1/refunds`; `two_concurrent_refunds_race_and_the_database_refuses_the_second`                                                                                                           |
+| Refund posting                             | <Status s="not-built" /> | Written, but nothing settles a `pending` refund — no refund poll ladder                                                                                                                                    |
+| Platform fee at capture                    | <Status s="not-built" /> | No column, no configuration                                                                                                                                                                                |
+| Nightly invariant checks                   | <Status s="not-built" /> | No scheduled job exists                                                                                                                                                                                    |
 
 The full record is the **Status** section of
 [the ledger flow](vpay:docs/flows/ledger.md#status).

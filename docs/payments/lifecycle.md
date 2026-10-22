@@ -184,8 +184,11 @@ the committed charge row, never from the adapter's in-memory answer.
 Both sequences run end to end in CI against WireMock hosts that answer the way
 vpay's documents say the rails answer. Against a real rail, the push
 sequence produced over seven successful payments against MTN's **sandbox**,
-using a test number that settles automatically. The redirect sequence has never met Orange, and no
-webhook has ever reached a merchant endpoint outside the vpay repository.
+using a test number that settles automatically. It has also taken three
+test-mode payments through Notch Pay's **sandbox**: one succeeded, one failed,
+and one that read `complete` for less than its amount was refused and was still
+`pending` when the run ended 15 minutes later. The redirect sequence has never met Orange, and no webhook has ever
+reached a merchant endpoint outside the vpay repository.
 :::
 
 ## What confirm can answer
@@ -218,21 +221,26 @@ rail: MTN can produce all eleven, Orange only three and Notch Pay four. See
   nothing (`canceled` is not settleable) and rolls back loudly. There is one
   terminal state and one terminal event, but the rail took money for a withdrawn
   intent. vpay has **no repair path** for this; an operator reconciles it.
+- **A decline whose settlement is refused.** If Postgres refuses the write that
+  fails the charge, the confirm answers `503` and leaves the charge
+  `submitting`, as a crash before the answer would. Once the age guard passes,
+  the worker resubmits it under the same reference, the rail declines it again,
+  and the worker fails the charge. See [crash safety](/payments/crash-safety).
 - **The rail never answers.** After 24 hours the _charge_ becomes `unresolved`
   and a human is alerted; the intent stays where it is and polling continues
   hourly. See [the reconciler](/payments/reconciler).
 
 ## Status in this release
 
-| Part                                                              | Status                   | Evidence                                                                                                            |
-| ----------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                                              |
-| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                                   |
-| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; over seven MTN payments succeeded against the real **sandbox** (2026-09-15)                |
-| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail                               |
-| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                                        |
-| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                                        |
-| Partial `amount_received`                                         | <Status s="not-built" /> | No rail settles part of an amount. Notch Pay's `incomplete` (paid less than asked) stays `Pending`, never a success |
+| Part                                                              | Status                   | Evidence                                                                                                                                                                   |
+| ----------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transition table (`next_status`)                                  | <Status s="built" />     | Proven exhaustive over every (status, verb) pair in `vpay_core::state`                                                                                                     |
+| Create and cancel over HTTP                                       | <Status s="built" />     | Integration tests; cancel emits `payment_intent.canceled` in the same transaction                                                                                          |
+| Confirm reaching a rail                                           | <Status s="partial" />   | Proven against WireMock; over seven MTN payments succeeded against the real **sandbox** (2026-09-15); three Notch Pay sandbox payments went through it (2026-10-21)        |
+| Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail; the worker has also settled sandbox payments (MTN 2026-09-15, Notch Pay 2026-10-21) |
+| Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                                                                                               |
+| `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                                                                                               |
+| Partial `amount_received`                                         | <Status s="not-built" /> | No rail settles part of an amount. Notch Pay's `incomplete` (paid less than asked) stays `Pending`, never a success                                                        |
 
 The full record is the **Status** section of
 [the payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md#status).

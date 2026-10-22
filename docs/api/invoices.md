@@ -151,8 +151,8 @@ sequenceDiagram
   Partial payments are out of scope, enforced by the database.
 
 Paying an invoice is exactly as proven as the rails are: apart from the MTN
-sandbox testing, where over seven payments succeeded, every rail call vpay has
-made went to a WireMock stub.
+sandbox testing, where over seven payments succeeded, and three payments through
+Notch Pay's sandbox, every rail call vpay has made went to a WireMock stub.
 
 ## Paid out of band
 

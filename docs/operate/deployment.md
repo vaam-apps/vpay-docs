@@ -34,8 +34,9 @@ The Helm chart renders, lints and validates against Kubernetes schemas in CI.
 vpay is now being tested for live use on some clusters (the owner's statement,
 2026-10-21), but at <Release /> vpay records **no pod running** in one — the
 one cluster observation on record is a refusal, below. The places vpay is
-recorded as having booted are Docker Compose on developer machines and in CI.
-Treat everything this page marks unproven as unproven.
+recorded as having booted are Docker Compose and plain host processes on
+developer machines, and CI. Treat everything this page marks unproven as
+unproven.
 :::
 
 Agents working on deployment should load [vpay-ops](skill:vpay-ops); for the
@@ -228,11 +229,13 @@ chart's `grace-period` guard refuses to render unless
 
 ## Local and CI: compose
 
-Compose is the only shape that has actually run vpay:
+Compose is the only containerised shape that has run the whole stack. The two
+sandbox runs, MTN's and Notch Pay's, were made with the server and worker as
+host processes against a local Postgres, not with these files:
 
 | File               | Adds                                                                                               |
 | ------------------ | -------------------------------------------------------------------------------------------------- |
-| `compose.yml`      | Postgres and the two WireMock rail stubs                                                           |
+| `compose.yml`      | Postgres and the three WireMock rail stubs: MTN, Orange and Notch Pay                              |
 | `compose.e2e.yml`  | `vpay-server`, `vpay-worker`, a WireMock webhook receiver, dashboard, checkout page, the demo shop |
 | `compose.demo.yml` | The overlay `just demo`, `just test-e2e` and CI's `e2e` job run under                              |
 
@@ -276,7 +279,9 @@ that tells this documentation site a release landed (a `repository_dispatch` of
 type `vpay-release` to vaam-apps/vpay-docs). It has no `needs:` and no shared
 concurrency with `release.yml`, so it cannot hold up or fail a release, and a
 release that leaves these docs stale still ships. The release runbook, as of
-vpay <Release />, records it as not yet proven on a real tag.
+vpay <Release />, records it as not yet proven on a real tag, although a
+`vpay-release` dispatch has reached this site on each vpay tag date since
+v0.5.0 ([How these docs stay current](/about/parity)).
 
 Installing from the registry takes the shape the chart README gives:
 

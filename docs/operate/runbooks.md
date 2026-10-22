@@ -40,8 +40,9 @@ no `kubectl` or `helm` command in any runbook is on record as run against one. T
 named in each section below: SQL executed against a scratch Postgres, states
 produced by integration tests, and three procedures (the demo, the checkout
 integration and the MTN sandbox test) that have genuinely been run end to end on
-one machine. Every alert threshold is proposed, and no Prometheus has ever
-evaluated one.
+one machine. A fourth, the Notch Pay sandbox test, has been run in two parts
+against Notch Pay's sandbox, except its webhook step. Every alert threshold is
+proposed, and no Prometheus has ever evaluated one.
 :::
 
 Agents working on operations should load [vpay-ops](skill:vpay-ops); for what
@@ -88,9 +89,15 @@ escalation with no terminal answer from the rail.
 
 - The payment is **escalated, not lost**: it is still polled hourly and the
   intent stays `processing`. The question is whether the payer was debited.
-- Read the `provider_requests` timeline. `status_code IS NULL` means no answer
-  was received — on a push rail that is the genuinely ambiguous case.
-  `status_code = 0` is a sentinel for "answered, no HTTP status".
+- Read the `provider_requests` timeline, and read its `operation` column first:
+  the same `error_kind` means different things on a `submit` row and on a
+  `query_status` row. On a `submit` row, `status_code IS NULL` means the outcome
+  is unknown — on a push rail that is the genuinely ambiguous case.
+  `status_code = 0` is a sentinel for "answered, no HTTP status": an accepted
+  submit, a decline, or — on a `query_status` row only — a status read the rail
+  answered, including one the adapter refused to act on. A `submitting` charge
+  beside a `0` submit row is not a declined charge: recovery reads it as "the
+  rail accepted it".
 - Query the rail directly by reference, then reconcile against its settlement
   statement. There is no annotation field to record the finding in.
 - Never force a charge terminal because it is old, and never create a
@@ -111,7 +118,10 @@ succeeding over 15 minutes (both numbers proposed).
   `misconfigured` is your YAML or credentials; `provider_error` is the adapter
   seeing a rail error string it does not know.
 - For `provider_error`, group by `charges.failure_raw`; a dominant new string is
-  a mapping to add. Never widen an existing mapping to swallow it.
+  a mapping to add. Never widen an existing mapping to swallow it. A
+  `provider_error` can also be an answer the adapter refused to act on: on a
+  `query_status` row of `provider_requests` that reads `status_code = 0`, meaning
+  the rail answered and vpay could not use it.
 
 [docs/runbooks/provider-error-rate.md](vpay:docs/runbooks/provider-error-rate.md)
 · background: [Failures](/payments/failures)
@@ -212,7 +222,8 @@ digest in Helm values.
 _Evidence:_ the workflow has run on `master` and on tags. `cosign verify` has
 never been run by anyone against anything this repository produced. The
 runbook, as of <Release />, records `notify-docs.yml` as not yet run on a real
-tag.
+tag. This site's own runs disagree: a `vpay-release` dispatch has arrived on
+each vpay tag date since v0.5.0 ([How these docs stay current](/about/parity)).
 [docs/runbooks/release.md](vpay:docs/runbooks/release.md) · background:
 [Deployment](/operate/deployment#the-release-pipeline)
 
@@ -314,23 +325,25 @@ machine — server, worker, payer page and dashboard.
 - The worker's authenticated status query is what settles the charge, not the
   callback.
 
-_Evidence:_ the one page whose commands have run against a real rail, on
+_Evidence:_ the first page whose commands ran against a real rail, on
 2026-09-15. It is not evidence of MTN production, Orange, refunds or a cluster.
 [docs/runbooks/live-sandbox-test.md](vpay:docs/runbooks/live-sandbox-test.md) ·
 background: [MTN MoMo](/rails/mtn-momo)
 
 ### Test Notch Pay against its sandbox
 
-**When:** taking the `notchpay` rail to **Notch Pay's real sandbox** for the
-first time, with a Notch Pay test-mode account.
+**When:** taking the `notchpay` rail to **Notch Pay's real sandbox**, with a
+Notch Pay test-mode account.
 
 - **Part A** is a probe, `cargo build -p vpay-notchpay --example sandbox_probe`,
   that asks Notch Pay's sandbox the open questions and writes a redacted report.
   It runs in phases: a read-only one first, then payments, then webhooks, and
   a read-only `search` phase that looks a payment up by reference.
 - **Part B** runs vpay itself with `--profile notchpay-sandbox` (still
-  `livemode: false`) and takes one sandbox payment that succeeds and one that
-  fails through the adapter.
+  `livemode: false`) and takes three sandbox payments through the adapter: one
+  that succeeds, one that fails, and one that collects less than was asked. That
+  third is expected to stay `pending`, not to reach `requires_payment_method`,
+  and any `succeeded` for it is a defect.
 - Test keys only: boot refuses a key with neither `test.` nor `test_` outside
   livemode. Keep them in an env file outside the repository, and never paste
   one anywhere.
@@ -343,21 +356,26 @@ _Evidence:_ written on 2026-10-20. **Part A ran against Notch Pay's sandbox on
 the maintainer's approval
 ([verification](vpay:docs/status/verification/2026-10-21-notchpay-sandbox-run.md)).
 Its answers corrected the adapter (see [Notch Pay](/rails/notchpay)); the
-webhook signature was not measured. **Part B, the first payment through vpay
-itself, has not been run against Notch Pay**: it was booted up to its health
-checks against a local Postgres with fixture keys.
+webhook step (A4) was not run, so the webhook signature was not measured.
+**Part B ran the same day**, on the maintainer's own machine, with a Postgres in
+Docker: three payments through vpay itself, read back from Postgres and the
+worker's log
+([verification](vpay:docs/status/verification/2026-10-21-notchpay-step5.md)).
+The runbook's commands were corrected from that run. It is evidence about Notch
+Pay's sandbox only: no production, no live key, no refund, no webhook, and no
+Orange number through vpay.
 [docs/runbooks/notchpay-sandbox-test.md](vpay:docs/runbooks/notchpay-sandbox-test.md)
 · background: [Notch Pay](/rails/notchpay)
 
 ## Status in this release
 
-| Runbook group                                       | Status                  | Evidence                                                                             |
-| --------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
-| Demo, checkout, live sandbox test                   | <Status s="built" />    | Executed end to end on one machine; checkout in CI via Cypress                       |
-| Worker queue, webhook failures, migrations, restore | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment        |
-| Deploy/rollback, both rotations, release            | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster |
-| Unresolved charges, provider error rate             | <Status s="unproven" /> | Alerts never evaluated; thresholds proposed                                          |
-| Notch Pay sandbox test                              | <Status s="partial" />  | Part A (the probe) run against the sandbox on 2026-10-21; Part B never run           |
+| Runbook group                                       | Status                  | Evidence                                                                                                                         |
+| --------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Demo, checkout, live sandbox test                   | <Status s="built" />    | Executed end to end on one machine; checkout in CI via Cypress                                                                   |
+| Worker queue, webhook failures, migrations, restore | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment                                                    |
+| Deploy/rollback, both rotations, release            | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster                                             |
+| Unresolved charges, provider error rate             | <Status s="unproven" /> | Alerts never evaluated; thresholds proposed                                                                                      |
+| Notch Pay sandbox test                              | <Status s="partial" />  | Part A (the probe) and Part B (three payments through vpay) run against the sandbox on 2026-10-21; the webhook step (A4) not run |
 
 The authoritative account of what each page has and has not been exercised
 against is [docs/runbooks/README.md](vpay:docs/runbooks/README.md).
