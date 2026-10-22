@@ -7,6 +7,7 @@ status: partial
 sources:
   - docs/flows/failures.md
   - docs/status/verification/2026-09-15.md
+  - docs/status/verification/2026-10-21-notchpay-step5.md
   - docs/flows/adapter-notchpay.md
 skills:
   - vpay-payments
@@ -64,8 +65,9 @@ flowchart TD
 
 The rail's own word survives in `failure_raw`, which is stored and logged. Only
 the taxonomy code and a generic message are public. A decline at submit answers
-the confirm with `409 charge_declined`; a decline found later by the poll ladder
-arrives as the same `payment_intent.payment_failed` event.
+the confirm with `409 charge_declined`. A decline found later arrives as the
+same `payment_intent.payment_failed` event, whether the poll ladder found it or
+the worker met it resubmitting a charge the confirm left unresolved.
 
 ## Which rail can produce which code
 
@@ -73,7 +75,7 @@ The vocabulary says what each code **means**. It does not say whether anything
 can **produce** it — and MTN can produce all eleven, while Orange can produce
 three and Notch Pay four.
 
-| Code                       | MTN MoMo                                    | Orange Money                | Notch Pay (adapter stub only)                                |
+| Code                       | MTN MoMo                                    | Orange Money                | Notch Pay (stub only)                                        |
 | -------------------------- | ------------------------------------------- | --------------------------- | ------------------------------------------------------------ |
 | `insufficient_funds`       | `NOT_ENOUGH_FUNDS`                          | —                           | —                                                            |
 | `payer_timeout`            | `COULD_NOT_PERFORM_TRANSACTION`, `EXPIRED`  | `EXPIRED`                   | `expired`, `abandoned`                                       |
@@ -103,20 +105,26 @@ look alike.
 ### Why Notch Pay can say so little
 
 Notch Pay's status read carries a status and no reason. On 2026-10-21 its
-sandbox, asked through vpay's probe rather than the adapter, read its outcome
-numbers as `complete`, `failed` (other failure), `expired` (timeout) and
-`canceled` (canceled by user), with no reason field. So `insufficient_funds` is
-unreachable there. Since v0.9.1 `canceled` maps to `payer_declined`, on that
-evidence; it was `provider_error` before. Anyone holding the merchant's public
-key can cancel a payment too
-([Notch Pay](/rails/notchpay#the-production-risk)), so a `canceled` read is
-evidence of a decline, not proof of whose. The "insufficient funds" number read
+sandbox, asked through vpay's probe, read its outcome numbers as `complete`,
+`failed` (other failure), `expired` (timeout) and `canceled` (canceled by
+user), with no reason field. So `insufficient_funds` is unreachable there.
+Since v0.9.1 `canceled` maps to `payer_declined`, on that evidence; it was
+`provider_error` before. Anyone holding the merchant's public key can cancel a
+payment too ([Notch Pay](/rails/notchpay#the-production-risk)), so a `canceled`
+read is evidence of a decline, not proof of whose. The "insufficient funds" number read
 `complete` for less than was asked, which the adapter now refuses as
 `Malformed` rather than counting as a success. A `503` or a timeout is a
 transport error, never a decline, which is why `provider_unavailable` is a
-dash. **The adapter has still never read a Notch Pay payment**: this column is
-the sandbox's answers to a probe, mapped by an adapter proven only against
-WireMock.
+dash.
+
+**The column heads say "stub only" because each row's proof is a WireMock
+case.** The adapter has read Notch Pay's sandbox once, the same day: three
+test-mode payments went through vpay itself. One read `failed` and became
+`provider_error`, and the "insufficient funds" number's short `complete` was
+refused as `Malformed` on every read after the first. `failed` is the only row
+of the mapping the sandbox has witnessed through the adapter. The timeout and
+canceled numbers were not run through vpay, and Notch Pay's production has
+never been called.
 
 ::: tip For merchants
 Write one branch per code — that is the right integration. Do **not** assume
@@ -143,14 +151,14 @@ runbook is [provider-error-rate](vpay:docs/runbooks/provider-error-rate.md).
 
 ## Status in this release
 
-| Part                                | Status                  | Evidence                                                                                                                                                                                                          |
-| ----------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                                                                                                                              |
-| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case                                                                                                      |
-| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                                                                                                                           |
-| Notch Pay mapping                   | <Status s="unproven" /> | The eleven documented statuses mapped and unit-tested; five driven against WireMock; the sandbox's outcome numbers read by a probe on 2026-10-21; none read through the adapter                                   |
-| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                                                |
-| Mappings faithful to the real rails | <Status s="unproven" /> | No real rail has ever declined a vpay charge: every decline came from WireMock; MTN's sandbox was called on one day (2026-09-15) and produced no decline; Orange and the Notch Pay adapter have never been called |
+| Part                                | Status                  | Evidence                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The taxonomy                        | <Status s="built" />    | `vpay-core::failure`                                                                                                                                                                                                                                                                                              |
+| MTN mapping table                   | <Status s="partial" />  | Row by row in both directions; checked against MTN's published enum; every mapped reason has a WireMock case                                                                                                                                                                                                      |
+| Orange mapping                      | <Status s="partial" />  | Its documented statuses mapped and tested; proven only against WireMock                                                                                                                                                                                                                                           |
+| Notch Pay mapping                   | <Status s="partial" />  | The eleven documented statuses mapped and unit-tested; five driven against WireMock; the sandbox's outcome numbers read by a probe on 2026-10-21; through the adapter the sandbox witnessed `failed` becoming `provider_error`, and no other row                                                                  |
+| Decline reaching the merchant       | <Status s="partial" />  | `409 charge_declined`, `last_payment_error`, one `payment_intent.payment_failed` — rails are stubs                                                                                                                                                                                                                |
+| Mappings faithful to the real rails | <Status s="unproven" /> | Every decline at submit came from WireMock. MTN's sandbox was called on one day (2026-09-15) and produced no decline. Notch Pay's sandbox failed one payment (2026-10-21), and it landed in `provider_error`, so it tested no mapped reason. Orange has never been called, and neither has Notch Pay's production |
 
 The first documented sandbox session took three runs: the first two stopped at
 the token mint on adapter bugs, and the third settled its charge. Over seven
@@ -158,6 +166,12 @@ payments succeeded across the 2026-09-15 testing; no charge decline was
 observed, so those successes did not test any row of the tables above. The
 initial session is recorded in
 [vpay's verification log for 2026-09-15](vpay:docs/status/verification/2026-09-15.md).
+
+Notch Pay's sandbox run of 2026-10-21 put three payments through the adapter:
+one succeeded, one read `failed` and became `provider_error`, and one read
+`complete` for less than its amount and was refused. It saw no decline with a
+mapped reason either
+([vpay's verification log](vpay:docs/status/verification/2026-10-21-notchpay-step5.md)).
 
 The full record is the **Status** section of
 [the failure taxonomy flow](vpay:docs/flows/failures.md#status).

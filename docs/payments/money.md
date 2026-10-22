@@ -7,6 +7,7 @@ status: built
 sources:
   - docs/flows/money.md
   - backends/crates/vpay-core/src/money.rs
+  - backends/crates/vpay-adapter-notchpay/src/mapping.rs
   - Cargo.toml
 skills:
   - vpay-payments
@@ -68,6 +69,14 @@ uses the encoding its rail's own documentation names.
 integer `amount`. Its adapter sends the stored minor units and refuses a charge
 in any currency other than XAF, whose exponent is 0, so the integer it sends is
 the amount a person reads.
+
+The same adapter checks the amount on the way back. A status read of `complete`
+is a success only if the amount, the `amounts.total` Notch Pay says it
+collected, and the currency are all the charge's. Otherwise the read is refused
+as `Malformed` and never settles the charge. Notch Pay's sandbox read one test
+payment of 230 XAF as `complete` with a short `amounts.total`, the adapter
+refused each of those reads, and the charge was still `pending` 15 minutes later
+([`mapping.rs`](vpay:backends/crates/vpay-adapter-notchpay/src/mapping.rs)).
 
 ### Worked examples
 
@@ -134,7 +143,8 @@ and `CurrencyMismatch` are the caller's problem (`400`), while an `i64`
 | Integer minor units, float ban             | <Status s="built" />   | `float_arithmetic = "deny"` in the workspace lints                                                                                         |
 | `to_provider_string` / `to_provider_minor` | <Status s="built" />   | `xaf_renders_the_same_digits_in_both_encodings`, `eur_pads_the_fractional_part`, and Orange's `the_amount_is_a_json_number_in_minor_units` |
 | The three `Money` invariants               | <Status s="built" />   | Tests in `vpay-core::money`                                                                                                                |
-| EUR on a real rail                         | <Status s="partial" /> | Over seven successful MTN **sandbox** payments in EUR; XAF has never reached a real rail                                                   |
+| EUR on a real rail                         | <Status s="partial" /> | Over seven successful MTN **sandbox** payments in EUR                                                                                      |
+| XAF on a real rail                         | <Status s="partial" /> | Three Notch Pay **sandbox** payments in XAF (210, 220 and 230 XAF); one posted a 210 XAF capture. No real money has moved                  |
 
 The full record is [the money flow](vpay:docs/flows/money.md).
 

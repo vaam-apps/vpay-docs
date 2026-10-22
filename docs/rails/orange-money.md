@@ -73,7 +73,7 @@ sequenceDiagram
     M->>B: redirect to payment_url
     B->>O: payer enters a one-time code obtained by USSD
     O->>B: send payer back to return_url
-    opt notification (a hint only)
+    opt notification (a hint only, never received, its body is not confirmed)
         O->>API: POST /provider/orange_money/callback
         API-->>O: 202, poll job pulled forward
     end
@@ -217,6 +217,20 @@ confirm with Orange Cameroun" list:
   has not).
 - Whether the notification carries `pay_token`, and whether it can be verified
   beyond `notif_token`.
+- **Whether the notification carries `order_id` at all.** The adapter's
+  `parse_callback` _requires_ one and answers `Malformed` without it, which the
+  callback route turns into a `400` and a warning. Several third-party sources
+  (a Mali integration quoting a body from a real payment, and community
+  libraries for other countries) describe the body as `status`, `notif_token`
+  and `txnid`, with no `order_id`. None is Orange Cameroun and none is Orange's
+  specification, so vpay changed nothing on their word. If they are right for
+  Cameroon, **every real Orange callback is refused**. That costs latency only:
+  a callback is a hint, and the worker's `transactionstatus` read resolves the
+  charge at its next rung either way. Fixing it is not a one-line relaxation,
+  because the callback would have to name the charge some other way.
+- Whether Orange resends a notification that is refused or unanswered. No
+  official Orange source says either way, and the third-party claims contradict
+  each other. Nothing on this page assumes Orange retries.
 - **The `notif_token` comparison is not built.** `parse_callback` requires a
   `notif_token` and fails closed without one, but the callback route discards it
   rather than comparing it with the stored token.
@@ -228,15 +242,15 @@ confirm with Orange Cameroun" list:
 
 ## Status in this release
 
-| Part                                                                | Status                   | Evidence                                                                              |
-| ------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------- |
-| Token, `webpayment`, `transactionstatus` (`submit`, `query_status`) | <Status s="unproven" />  | Implemented; all conformance cases pass against WireMock; never called against Orange |
-| `parse_callback`                                                    | <Status s="unproven" />  | Fails closed without `notif_token`; only vpay's own tests have posted to it           |
-| `notif_token` comparison on the callback route                      | <Status s="not-built" /> | The route discards the received token                                                 |
-| `refund`                                                            | <Status s="not-built" /> | `NotImplemented("orange_money::refund")`; merchants get a `501`                       |
-| Partial refunds                                                     | <Status s="not-built" /> | `supports_partial_refunds: false` by decision                                         |
-| Account-holder lookup                                               | <Status s="not-built" /> | `supports_account_holder_lookup: false`; Orange's route unconfirmed                   |
-| Hosted page timing and cancel                                       | <Status s="unproven" />  | The stub's own invention, not a measurement of Orange                                 |
+| Part                                                                | Status                   | Evidence                                                                                                                                                   |
+| ------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token, `webpayment`, `transactionstatus` (`submit`, `query_status`) | <Status s="unproven" />  | Implemented; all conformance cases pass against WireMock; never called against Orange                                                                      |
+| `parse_callback`                                                    | <Status s="unproven" />  | Fails closed without `notif_token` and without `order_id`; only vpay's own tests have posted to it. Whether a real notification carries `order_id` is open |
+| `notif_token` comparison on the callback route                      | <Status s="not-built" /> | The route discards the received token                                                                                                                      |
+| `refund`                                                            | <Status s="not-built" /> | `NotImplemented("orange_money::refund")`; merchants get a `501`                                                                                            |
+| Partial refunds                                                     | <Status s="not-built" /> | `supports_partial_refunds: false` by decision                                                                                                              |
+| Account-holder lookup                                               | <Status s="not-built" /> | `supports_account_holder_lookup: false`; Orange's route unconfirmed                                                                                        |
+| Hosted page timing and cancel                                       | <Status s="unproven" />  | The stub's own invention, not a measurement of Orange                                                                                                      |
 
 The full record is in vpay's
 [Orange adapter flow § Status](vpay:docs/flows/adapter-orange-money.md#status).
@@ -244,7 +258,7 @@ The full record is in vpay's
 ## Go deeper
 
 - [Adapter: Orange Money Cameroun](vpay:docs/flows/adapter-orange-money.md) —
-  the calls, the ten "to confirm" items, the proof inventory
+  the calls, the eleven "to confirm" items, the proof inventory
 - [Crash safety](vpay:docs/flows/crash-safety.md) — why redirect preconditions
   differ from push ones
 - [Payment lifecycle](/payments/lifecycle) and

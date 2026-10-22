@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.9.1`. Being published
+2026-09-23. The manifest in <Release /> is version `0.10.2`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
@@ -144,9 +144,9 @@ Two additions from vpay 0.6.0 are worth knowing:
 - **`invoices.pay` takes an optional `outOfBand` object** (`method`,
   `reference`, `receivedAt`) to record a payment made outside vpay
   ([paid out of band](/api/invoices#paid-out-of-band)). A `success_url` or
-  `cancel_url` beside it is refused with a `TypeError` before any request. The
-  hosted arm of `PayInvoiceParams` is the old shape, so existing callers are
-  unaffected.
+  `cancel_url` beside it is refused with a `VpayInvalidParamsError` naming the
+  field, before any request. The hosted arm of `PayInvoiceParams` is the old
+  shape, so existing callers are unaffected.
   `events.retrieve` does not exist in this SDK (a dated parity gap), and
   `balance.retrieve` reaches a `404` because the server serves no `/v1/balance`.
 
@@ -184,20 +184,37 @@ Every error extends `VpayError`. Branch on the subclass, then on `code`:
 | `VpayUnexpectedResponseError` | Not vpay's envelope — a proxy's HTML 502, or a non-`Bearer` token           |
 | `VpayTransportError`          | DNS, TLS, refused connection, timeout                                       |
 | `VpayConfigError`             | Misconfiguration, caught at construction where possible                     |
+| `VpayInvalidParamsError`      | A parameter the SDK refuses to send, caught before anything is sent         |
 | `WebhookSignatureError`       | `verifyWebhook` rejected a delivery                                         |
 
 Two idempotency errors share status `400` and type `idempotency_error` and mean
 opposite things: `idempotency_key_in_flight` (wait and resend the same call) and
-`idempotency_key_in_use` (the key was used with a different body — a bug). One
-exception to the `VpayError` rule: a parameter the SDK refuses to send throws a
-bare `TypeError` (a dated gap). That is an out-of-range amount and, since
-v0.9.1, an empty or all-dots `id` on any of the twenty-one methods that put one
-in the path: `""`, `.`, `..` or a longer run of dots is refused before any
-request, the token request included, with one fixed message that never quotes
-the id. Those ids used to be sent, and `fetch`'s URL parser resolved them before
-the request left, so `customers.del("..")` was a `DELETE /v1/`. No signature
-changed, but a caller catching `VpayApiError` for those inputs now gets the
-`TypeError`. See [Errors](/payments/errors).
+`idempotency_key_in_use` (the key was used with a different body — a bug).
+
+`VpayInvalidParamsError` is the SDK saying no before anything leaves your
+process: no token is minted and no request is built. `sdks/rust`'s
+`Error::InvalidParams` is its twin. It carries `param`, the parameter's wire
+name — `amount`, `unit_amount`, `id`, `success_url`, or a nested form path such
+as `metadata[order_id]` — and its message reads
+`invalid request parameter {param}: {detail}`. It is thrown for:
+
+- an amount outside `0..=2^53-1`;
+- a value the form encoder cannot put on the wire exactly: a number that is not
+  a safe integer, a `Date`, a `Map` or a class instance;
+- a `success_url` or `cancel_url` beside `outOfBand` on `invoices.pay`;
+- an empty or all-dots `id` on any of the twenty-one methods that put one in
+  the path. `""`, `.`, `..` or a longer run of dots is refused before any
+  request, with one fixed message that never quotes the id. Those ids would
+  otherwise be sent, and `fetch`'s URL parser resolves them before the request
+  leaves, so `customers.del("..")` would be a `DELETE /v1/`.
+
+It extends `VpayError`, so the one catch-all, `instanceof VpayError`, catches it
+with the rest. **It is not a `TypeError`.** Through v0.9.1 these refusals were
+bare `TypeError`s; since v0.10.0, code that tests `instanceof TypeError` for
+them no longer matches, and cannot be made to — a class has one superclass, and
+making `VpayError` a `TypeError` would make a network failure one too. Test
+`instanceof VpayInvalidParamsError` instead. No signature changed, and nothing
+that was sent before is refused now. See [Errors](/payments/errors).
 
 ## Webhook verification
 
@@ -286,26 +303,33 @@ right bytes" and "the SDK works against vpay".
 - **`sdks/stripe-compat`** drives the official `stripe` package through this
   SDK's authenticator against a live compose stack, in CI's `e2e` job.
 - **`examples/merchant-node`** is written against a hypothetical
-  `api.vpay.example` and is not run against a stack by anything. Since
-  v0.9.0 its rail, number, amount and order come from environment variables,
-  so vpay's Notch Pay sandbox runbook can use it for its first test-mode
-  payment through vpay; that part of the runbook (Part B) has not been run.
+  `api.vpay.example`, and no gate runs it against a stack. Since v0.9.0 its
+  rail, number, amount and order come from environment variables, so vpay's
+  Notch Pay sandbox runbook can use it for test-mode payments through vpay.
 - **Real sandbox evidence:** over seven MTN sandbox payments succeeded on
   2026-09-15. A documented sandbox run minted a payment with
   `examples/checkout-browser/mint.mjs` through this SDK
-  ([live sandbox test](/operate/runbooks#live-sandbox-test)).
+  ([live sandbox test](/operate/runbooks#live-sandbox-test)). On 2026-10-21
+  Part B of the Notch Pay runbook ran `examples/merchant-node` three times
+  against a local `vpay-server`, worker and Postgres whose `notchpay` adapter
+  called Notch Pay's real sandbox
+  ([Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)):
+  one payment succeeded, one failed, and one that Notch Pay read as complete for
+  less than its amount stayed `pending`. Test keys, no production, no real
+  payer on record, and no webhook from Notch Pay.
 
 ## Status in this release
 
-| Part                                                                 | Status                   | Evidence                                                                    |
-| -------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
-| `private_key_jwt` handshake, token cache, single re-auth             | <Status s="built" />     | Parity ✅ rows against `node:http` stubs; real-OP check is manual only (⛔) |
-| `/v1` resource methods                                               | <Status s="built" />     | Every method's wire shape pinned; byte-identical to the Rust SDK            |
-| Refunds and invoices against a running vpay                          | <Status s="partial" />   | Live suites green against WireMock rails; no refund ever settles            |
-| Checkout sessions, customers, account holders against a running vpay | <Status s="unproven" />  | Stub-only (dated ⛔ rows)                                                   |
-| Stripe authenticator                                                 | <Status s="built" />     | Unit-tested and exercised end to end by `sdks/stripe-compat`                |
-| An empty or all-dots path `id` refused before any request (v0.9.1)   | <Status s="built" />     | Four ✅ rows in the matrix's "Request validation"; a `TypeError` (dated ⛔) |
-| Retries, `request-id`, `stripe-should-retry`, `events.retrieve`      | <Status s="not-built" /> | Dated ⛔ rows in the parity matrix                                          |
+| Part                                                                 | Status                   | Evidence                                                                        |
+| -------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `private_key_jwt` handshake, token cache, single re-auth             | <Status s="built" />     | Parity ✅ rows against `node:http` stubs; real-OP check is manual only (⛔)     |
+| `/v1` resource methods                                               | <Status s="built" />     | Every method's wire shape pinned; byte-identical to the Rust SDK                |
+| Refunds and invoices against a running vpay                          | <Status s="partial" />   | Live suites green against WireMock rails; no refund ever settles                |
+| Checkout sessions, customers, account holders against a running vpay | <Status s="unproven" />  | Stub-only (dated ⛔ rows)                                                       |
+| Stripe authenticator                                                 | <Status s="built" />     | Unit-tested and exercised end to end by `sdks/stripe-compat`                    |
+| An empty or all-dots path `id` refused before any request (v0.9.1)   | <Status s="built" />     | Four ✅ rows in the matrix's "Request validation"                               |
+| Every local refusal is a `VpayInvalidParamsError` (v0.10.0)          | <Status s="built" />     | A ✅ row in "Request validation"; no longer a `TypeError`, so a breaking change |
+| Retries, `request-id`, `stripe-should-retry`, `events.retrieve`      | <Status s="not-built" /> | Dated ⛔ rows in the parity matrix                                              |
 
 The full record is the Node column of
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md) and the package's own

@@ -176,6 +176,13 @@ Those ids used to be sent, and the URL parser resolved them before the request
 left, so `customers().del("..")` was a `DELETE /v1/`. A caller matching on
 `Error::Api { status: 404, .. }` for those inputs now gets `InvalidParams`.
 
+`Error::InvalidParams` carries `param` and `message`, and displays as
+`invalid request parameter {param}: {message}`. Its twin in the
+[Node.js SDK](/sdks/nodejs#errors) is `VpayInvalidParamsError`, which carries
+the same `param` and writes the same prefix. The id refusal reads byte for byte
+the same in both; the amount refusal keeps each SDK's own wording. The Node
+refusals are `VpayError`s since v0.10.0, and were bare `TypeError`s before.
+
 Branch on `code`, not on `kind`: `idempotency_key_in_flight` means wait and
 resend the same call; `idempotency_key_in_use` means the key was reused with a
 different body. See [Errors](/payments/errors).

@@ -59,8 +59,8 @@ flowchart TD
   compare-and-swap: re-running it matches no rows and answers "done".
 - **The poll job is born with the charge**, in the same transaction, so every
   kill point in [crash safety](/payments/crash-safety) leaves work behind. The
-  hourly `scan:live` job is only a backstop for charges nothing has touched for
-  ten minutes.
+  `scan:live` job runs every ten minutes and is only a backstop for charges
+  nothing has touched for ten minutes; in a healthy deployment it finds none.
 
 ## The poll ladder
 
@@ -85,6 +85,15 @@ and the callback route's enqueue all pass a delay, and the statement computes
 judged it with the database's, so a skewed host made jobs run early or late. The
 queue-age gauge is subtracted in SQL for the same reason. No rung, interval or
 ordering changed.
+
+**An answer the adapter will not act on is retried, not failed.** If a status
+query comes back with something the adapter refuses as `Malformed` — a Notch Pay
+`complete` whose `amounts.total` is not the charge's amount, for one — the poll
+rides the ladder with a warning and no alert. By the code, the charge reaches
+`unresolved` only at the 24-hour horizon. The attempt is recorded in
+`provider_requests` as answered (`status_code` `0`, `error_kind`
+`provider_error`), so an operator can tell it from a read the rail never
+answered; see [the unresolved-charges runbook](vpay:docs/runbooks/unresolved-charges.md).
 
 ## Timers assert nothing
 
@@ -137,8 +146,7 @@ authenticated status query is the only thing that moves money.
 
 The route answers `202` whether or not the reference names a charge — on
 purpose, so that an unauthenticated endpoint is not an oracle for "does this
-charge exist", and so that a rail does not retry forever against a reference it
-will never find. Only two things get a different answer: a `{code}` that names
+charge exist". Only two things get a different answer: a `{code}` that names
 no rail this process links is a `404`, identical to the router's own fallback,
 and a body that is not a notification the rail could have sent is a `400`.
 
@@ -161,6 +169,20 @@ unauthenticated caller cannot spend a rail request on a poll that was about to
 happen anyway. There is **no rate limit** on the route beyond that, and **no
 rail has ever called it**: every body it has parsed was transcribed from vpay's
 own adapter docs.
+
+**A callback that never arrives costs time, not correctness.** MTN's own
+documentation says it sends a callback once and has no retry mechanism, and no
+Orange source says either way. Of the rails linked, only Notch Pay's reference
+mentions retrying, and it asks for a `200`, so whether it counts vpay's `202` as
+delivered is an open question. A callback vpay misses is not resent. The poll
+ladder queries the rail at its next rung whether or not one arrives.
+
+Two more things about real callbacks are open, and each would cost latency only.
+MTN's own pages disagree on whether it calls back with `PUT` or `POST`; the
+route is `POST` only, so a `PUT` would be refused. And third-party sources
+describe Orange's notification with no `order_id`, which Orange's parser
+requires, so every real Orange callback would be a `400`. Neither has been
+settled, because no real callback has reached vpay.
 
 ## Leases and crash recovery
 
@@ -231,16 +253,16 @@ each. Two rules from it are worth knowing before an incident:
 
 ## Status in this release
 
-| Part                                       | Status                   | Evidence                                                                                        |
-| ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------- |
-| Durable queue, claim, leases               | <Status s="built" />     | `two_workers_claiming_together_never_take_the_same_job`; lease reaping at boot and on its timer |
-| Poll ladder and 24-hour escalation         | <Status s="partial" />   | `worker_recovery.rs`, `worker_e2e.rs` against real Postgres and a WireMock rail                 |
-| Callback route                             | <Status s="partial" />   | Eleven cases in `provider_callback.rs`; **no rail has ever called it**                          |
-| Graceful drain under SIGTERM               | <Status s="partial" />   | Both arms in `worker_kill9.rs`; MTN only, rail and receiver are WireMock                        |
-| `prompt_ttl_seconds` / `prompt_expired_at` | <Status s="not-built" /> | No column, no config key, no event                                                              |
-| Refund polling                             | <Status s="not-built" /> | No refund status read on the port                                                               |
-| Contradiction alert call sites             | <Status s="unproven" />  | Wired; not reached by any test                                                                  |
-| Operator runbooks                          | <Status s="unproven" />  | Queries run against a migrated database; never followed against a running deployment            |
+| Part                                       | Status                   | Evidence                                                                                                                                                                                                        |
+| ------------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Durable queue, claim, leases               | <Status s="built" />     | `two_workers_claiming_together_never_take_the_same_job`; lease reaping at boot and on its timer                                                                                                                 |
+| Poll ladder and 24-hour escalation         | <Status s="partial" />   | `worker_recovery.rs`, `worker_e2e.rs` against real Postgres and a WireMock rail; Notch Pay's sandbox run (2026-10-21) watched the first 15 minutes of the ladder; the 24-hour escalation was not observed there |
+| Callback route                             | <Status s="partial" />   | Eleven cases in `provider_callback.rs`; **no rail has ever called it**; MTN's `PUT` or `POST` and Orange's `order_id` are open                                                                                  |
+| Graceful drain under SIGTERM               | <Status s="partial" />   | Both arms in `worker_kill9.rs`; MTN only, rail and receiver are WireMock                                                                                                                                        |
+| `prompt_ttl_seconds` / `prompt_expired_at` | <Status s="not-built" /> | No column, no config key, no event                                                                                                                                                                              |
+| Refund polling                             | <Status s="not-built" /> | No refund status read on the port                                                                                                                                                                               |
+| Contradiction alert call sites             | <Status s="unproven" />  | Wired; not reached by any test                                                                                                                                                                                  |
+| Operator runbooks                          | <Status s="unproven" />  | Queries run against a migrated database; never followed against a running deployment                                                                                                                            |
 
 The full record is the **Status** section of
 [the reconciler flow](vpay:docs/flows/reconciler.md#status).

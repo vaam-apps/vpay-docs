@@ -139,7 +139,10 @@ sequenceDiagram
    intent's polling credential, the session's own `success_url`/`cancel_url` (so
    the stop list is derived from the session, never configured by the app), the
    rails on offer, and a fail-fast on a bad or expired link. An `embedded`
-   session is refused here with a typed error.
+   session is refused here with a typed error. So is a session secret whose id
+   is empty or only dots: the client refuses it before any request, `start`
+   answers `VpayCheckoutUnresolved`, and no dot segment can reach a
+   `/v1/browser` path ([Flutter checkout plugin](/sdks/flutter#credentials-on-the-device)).
 2. **Render natively.** The sheet is a Flutter widget tree driven by the rail
    spec the server sends: rail choice, the phone field, waiting, outcome. It is
    French by default (`VpayLocale.fr` / `.en`), carries the same 72 message keys

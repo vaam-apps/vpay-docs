@@ -297,9 +297,14 @@ screens are shown in English.
 ::: info What these screenshots are, and what they are not
 They are vpay's real components, rendered with fixture state. They are **not** a
 capture of a live payment. No rail answered behind them, and at <Release /> no
-real payer has seen any of these screens. The checkout components are among
-this page's sources, so a release that changes them marks the page stale and
-the screenshots due for a retake.
+real payer is on record as having seen any of these screens. The checkout
+components are among this page's sources, so a release that changes them marks
+the page stale and the screenshots due for a retake. **They are due now.**
+They were captured at v0.4.1, and since v0.10.0 the checkout app is built on
+`@vaam-apps/ui` `^0.5.0`
+([its manifest](vpay:frontends/apps/checkout/package.json)), whose Material 3
+palette replaced the one shown. Read them for each screen's content and state,
+not for how the page looks today.
 :::
 
 A few properties worth knowing:

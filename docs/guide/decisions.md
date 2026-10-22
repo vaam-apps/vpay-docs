@@ -37,6 +37,7 @@ sources:
   - docs/adr/0029-card-and-bank-adapters-and-payment-method-routing.md
   - docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md
   - docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md
+  - docs/status/verification/2026-10-21-notchpay-step5.md
   - docs/flows/README.md
   - AGENTS.md
 skills:
@@ -167,15 +168,15 @@ flowchart LR
 Most ADRs describe decisions that are in force. The ones below are where the
 decision and the code do not match yet, and the ADR says so itself:
 
-| Decision                              | Status                   | Evidence                                                                                                                                                                                                  |
-| ------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0008: dashboard per-record writes     | <Status s="not-built" /> | The 2026-09-20 addendum says `/dash/v1` mounts reads only, and the writes are designed but unbuilt                                                                                                        |
-| 0029: card and bank adapters, routing | <Status s="not-built" /> | _Accepted in part_: D12–D17 need the maintainer's confirmation. Its own implementation line says nothing it decides exists in code: no `method_types`, no `pm_…` object, no router                        |
-| 0031: server-side status key          | <Status s="unproven" />  | The `notchpay` adapter it admits is built and proven only against WireMock. It has never called Notch Pay, and the written question to Notch Pay stays open                                               |
-| 0013: backups, PITR, retention        | <Status s="not-built" /> | The status is _Proposed_. No backup, restore or drill has ever happened                                                                                                                                   |
-| 0022: surface isolation               | <Status s="partial" />   | The status is _Proposed_, pending maintainer acceptance, with three decisions deliberately left open                                                                                                      |
-| 0023: Tauri checkout plugin           | <Status s="partial" />   | The status is _Proposed_: its seven decisions were taken by the implementing agent, and four questions are left to the maintainer. The plugin it describes exists — see [Tauri checkout](/checkout/tauri) |
-| 0012: rail config keys                | <Status s="partial" />   | An interim exception to 0002 until the port grows a `required_settings()`-style hook                                                                                                                      |
+| Decision                              | Status                   | Evidence                                                                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0008: dashboard per-record writes     | <Status s="not-built" /> | The 2026-09-20 addendum says `/dash/v1` mounts reads only, and the writes are designed but unbuilt                                                                                                                                                                    |
+| 0029: card and bank adapters, routing | <Status s="not-built" /> | _Accepted in part_: D12–D17 need the maintainer's confirmation. Its own implementation line says nothing it decides exists in code: no `method_types`, no `pm_…` object, no router                                                                                    |
+| 0031: server-side status key          | <Status s="partial" />   | The `notchpay` adapter it admits has met Notch Pay's sandbox only: three test-mode payments, one succeeded, one failed, one read as paid short stayed `pending`. Production, webhooks and refunds are untried, and the written question to Notch Pay stays unanswered |
+| 0013: backups, PITR, retention        | <Status s="not-built" /> | The status is _Proposed_. No backup, restore or drill has ever happened                                                                                                                                                                                               |
+| 0022: surface isolation               | <Status s="partial" />   | The status is _Proposed_, pending maintainer acceptance, with three decisions deliberately left open                                                                                                                                                                  |
+| 0023: Tauri checkout plugin           | <Status s="partial" />   | The status is _Proposed_: its seven decisions were taken by the implementing agent, and four questions are left to the maintainer. The plugin it describes exists — see [Tauri checkout](/checkout/tauri)                                                             |
+| 0012: rail config keys                | <Status s="partial" />   | An interim exception to 0002 until the port grows a `required_settings()`-style hook                                                                                                                                                                                  |
 
 Each ADR's own status line is authoritative. The directory is
 [`docs/adr/`](vpay:docs/adr/0001-record-architecture-decisions.md).

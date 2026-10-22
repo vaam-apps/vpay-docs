@@ -20,11 +20,12 @@ skills:
 
 MTN Mobile Money Cameroon is vpay's **push** rail: vpay asks MTN to prompt the
 payer's handset, the payer approves with their PIN, and vpay learns the outcome
-by asking MTN — never by trusting a notification. It is the only rail vpay has
-ever called for real: over seven payments succeeded against MTN's **sandbox**
-during testing on 2026-09-15. Everything else on this page — refunds,
-the decline vocabulary, production — is proven against WireMock stubs or not at
-all.
+by asking MTN — never by trusting a notification. It was the first rail vpay
+called for real: over seven payments succeeded against MTN's **sandbox** during
+testing on 2026-09-15. (Notch Pay's sandbox has since taken three payments
+through vpay; see [Notch Pay](/rails/notchpay). Orange has never been called.)
+Everything else on this page — refunds, the decline vocabulary, production, the
+callback — is proven against WireMock stubs or not at all.
 
 Agents working on this adapter should load [vpay-mtn-momo](skill:vpay-mtn-momo).
 
@@ -65,9 +66,9 @@ sequenceDiagram
     API-->>M: 200, intent processing, next_action null
     MTN->>P: payment prompt
     P->>MTN: payer enters PIN
-    opt callback (a hint only)
-        MTN->>API: POST /provider/mtn_momo/callback
-        API-->>MTN: 202, poll job pulled forward
+    opt callback (a hint only, MTN documents one send and no retry, never yet received)
+        MTN->>API: callback to /provider/mtn_momo/callback (method not settled: POST or PUT)
+        API-->>MTN: 202 to a POST, poll job pulled forward
     end
     W->>A: query_status(charge, config)
     A->>MTN: GET /collection/v1_0/requesttopay/{ref}
@@ -98,6 +99,22 @@ MTN signs nothing and sends no shared secret, so `parse_callback` returns the
 reference (from `referenceId`, else `externalId`) and deliberately ignores the
 body's `status`. The worker's authenticated status query on the
 [poll ladder](/payments/reconciler) is what moves money.
+
+MTN's own documentation says it sends a callback **once**, has no retry
+mechanism, and recommends polling. A callback vpay misses is, on that account,
+not resent. That costs latency, not money: the poll ladder reads the charge at
+its next rung either way.
+
+::: warning Which HTTP method MTN sends the callback with is open
+MTN's pages disagree. Its callback page says the callback "will be a POST
+request" and also tells partners to allow both `PUT` and `POST` on the listener
+host. Its "API Methods" section says `PUT` is what the Open API uses to send
+callbacks. vpay's callback route mounts **`POST` only**, so a `PUT` meets the
+same bare `405` a `GET` does (a test pins the `GET`; none sends a `PUT`). If MTN
+sends `PUT`, every MTN callback is refused and, being sent once, lost. Nothing
+was changed for this: no MTN callback has ever reached vpay, and vpay's flow
+doc lists it as the first "to confirm with MTN" item.
+:::
 
 ## Credentials and tokens
 
@@ -260,7 +277,7 @@ are not the total number of payments tested that day.
 | `query_status` observing success; intent `succeeded` | Any decline or failure code                                                                     |
 | Sandbox `base_url` and `target_environment: sandbox` | The account-holder lookup against the real sandbox                                              |
 | EUR as the sandbox currency (it rejects XAF)         | Disbursements, token or transfer — never called                                                 |
-|                                                      | The callback reaching vpay; the 401 → re-mint path                                              |
+|                                                      | The callback reaching vpay, and whether it is a `POST` or a `PUT`; the 401 → re-mint path       |
 
 To reproduce it yourself, follow vpay's
 [live sandbox runbook](vpay:docs/runbooks/live-sandbox-test.md): it needs your
@@ -297,7 +314,7 @@ mean nothing to MTN's sandbox; against the real sandbox use `46733123454`.
 | --------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
 | Collections token mint                  | <Status s="partial" />  | Called against MTN's real sandbox on 2026-09-15                                                      |
 | `submit` / `query_status` (push charge) | <Status s="partial" />  | Over seven sandbox payments succeeded 2026-09-15; WireMock conformance otherwise                     |
-| `parse_callback` and the callback route | <Status s="unproven" /> | Built; only vpay's own tests have ever called it                                                     |
+| `parse_callback` and the callback route | <Status s="unproven" /> | Built; only vpay's own tests have ever called it. The route mounts `POST` only; MTN's method is open |
 | Failure mapping                         | <Status s="unproven" /> | Every row driven against WireMock; no MTN decline ever observed                                      |
 | `refund` (Disbursements `transfer`)     | <Status s="unproven" /> | Written and WireMock-proven; never called; no real credential; refunds stay `pending`                |
 | `account_holder_name`                   | <Status s="unproven" /> | WireMock only; `404` behaviour unverified. An empty or all-dots number is refused before any request |
@@ -311,7 +328,7 @@ The full record is in vpay's
 ## Go deeper
 
 - [Adapter: MTN MoMo Cameroon](vpay:docs/flows/adapter-mtn-momo.md) — every wire
-  shape, the steering table, "Not proven"
+  shape, the steering table, "Not proven", and "To confirm with MTN"
 - [2026-09-15 — the first real rail call](vpay:docs/status/verification/2026-09-15.md)
 - [Live sandbox runbook](vpay:docs/runbooks/live-sandbox-test.md)
 - [Rotating a rail credential](vpay:docs/runbooks/rotate-rail-credentials.md)

@@ -5,7 +5,7 @@
     "tag": "v0.10.2",
     "ref": "90fe1b919175fef2a85f6ded1b75ed15b347ff6f",
     "tagDate": "2026-10-22",
-    "verifiedAt": null,
+    "verifiedAt": "2026-10-22",
     "previous": {
       "tag": "v0.9.1",
       "ref": "c9c2f691ca73044d76233989bc56349a7f45fee5"
@@ -13,7 +13,7 @@
   },
   "skills": {
     "repository": "vaam-apps/vpay-skills",
-    "ref": "4cb3936c11ba6979dca2a1ebfd82e835667be151",
-    "verifiedAt": null
+    "ref": "db76c07321910fb8501934ec6825f3f5e47f3a04",
+    "verifiedAt": "2026-10-22"
   }
 }

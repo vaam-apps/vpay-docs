@@ -29,8 +29,9 @@ OAuth2 `client_credentials` + `private_key_jwt` (see
 
 Every route below is real — it answers with real rows from a real Postgres — but
 the rails behind the money-moving ones have only ever been WireMock stubs, apart
-from over seven successful MTN **sandbox** payments on 2026-09-15. Read [Status](/guide/status)
-before you build on anything here.
+from over seven successful MTN **sandbox** payments on 2026-09-15 and three
+test-mode payments through Notch Pay's **sandbox** on 2026-10-21. Read
+[Status](/guide/status) before you build on anything here.
 
 Agents working on this surface should load
 [vpay-merchant-api](skill:vpay-merchant-api).
@@ -51,9 +52,8 @@ a security bug.
 `/v1/browser` is **not** a second way into `/v1`: it has its own route table,
 its own 404 fallback and CORS, and exactly one route that is not a `GET`.
 `/dash/v1` is mounted only on a deployment configured for the staff surface, and
-— like everything else — has never run in a deployment. The provider callback
-route is proven against WireMock and has never been called by MTN, Orange or
-Notch Pay.
+no deployment running it is on record. The provider callback route is
+proven against WireMock and has never been called by MTN, Orange or Notch Pay.
 
 ![vpay system overview: merchant, vpay-server serve and worker, Postgres, rails, checkout, dashboard and webhooks](/images/architecture.svg){.diagram}
 
@@ -237,12 +237,21 @@ saying the charge is being resolved, poll the `GET`. Only a `409` saying the
 charge is terminal means "create a new intent".
 :::
 
+A rail that answers and declines is a different case from one that does not
+answer. `confirm` then returns `409` `charge_declined`: the charge is `failed`,
+the intent stays in `requires_payment_method` carrying the reason, and one
+`payment_intent.payment_failed` event is emitted. At <Release /> a confirm
+settles the decline first and records the attempt second, so once the decline is
+settled, a failure to record the attempt is logged and you still get the `409`.
+When the worker resubmits a charge the rail has no record of and the rail
+declines it, the worker fails the charge the same way. A retry after a decline
+is a new PaymentIntent.
+
 ## Refunds: a `201` is not money back
 
-The four refund write routes were mounted on 2026-09-16. A `201` from
-`POST /v1/refunds` means vpay wrote the refund as `pending`, reserved its amount
-against the intent, emitted `charge.refunded` in the same transaction, and
-instructed the rail. It does **not** mean money moved:
+A `201` from `POST /v1/refunds` means vpay wrote the refund as `pending`,
+reserved its amount against the intent, emitted `charge.refunded` in the same
+transaction, and instructed the rail. It does **not** mean money moved:
 
 - **nothing settles a `pending` refund** — the provider port has no refund
   status read and there is no refund poll ladder (RFC-0003 open question 8);
@@ -271,15 +280,15 @@ invented a resource. Both SDKs can call it and get that `404`.
 
 ## Status in this release
 
-| Part                                        | Status                   | Evidence                                                                                           |
-| ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                      |
-| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded; other rail evidence is stub-based |
-| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                    |
-| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                   |
-| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                  |
-| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                       |
-| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                              |
+| Part                                        | Status                   | Evidence                                                                                                                              |
+| ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                                                         |
+| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded and Notch Pay's sandbox took three; other rail evidence is stub-based |
+| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                                                       |
+| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                                                      |
+| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                                                     |
+| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                                                          |
+| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                                                                 |
 
 The full record is [docs/api/README.md](vpay:docs/api/README.md) and
 [docs/status/backend.md](vpay:docs/status/backend.md).

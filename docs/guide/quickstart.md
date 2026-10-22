@@ -14,6 +14,7 @@ sources:
   - compose.e2e.yml
   - compose.demo.yml
   - justfile
+  - docs/status/verification/2026-10-21-notchpay-step5.md
 skills:
   - vpay-tooling
   - vpay-troubleshooting
@@ -56,8 +57,10 @@ just up               # Postgres + a WireMock host per rail
 run the binaries directly (see below). Since v0.9.0 it also starts
 `wiremock-notchpay`, a stand-in for Notch Pay with no host port; no vpay process
 talks to it unless you uncomment the `notchpay` block in
-`config/application.yml`, and the demo below does not start it. `just down`
-removes those containers and their volume. Run `just` with no argument to list every task.
+`config/application.yml`, and the demo below does not start it. It is a stub
+that answers in the shape Notch Pay's sandbox answered. Notch Pay's sandbox was
+never called from this stack. `just down` removes those containers and their
+volume. Run `just` with no argument to list every task.
 
 ## The demo
 
@@ -282,13 +285,17 @@ by hand: none of them is in `just ci` or `just verify`. See
 
 ## Status in this release
 
-| Part                        | Status                  | Evidence                                                                                                   |
-| --------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate   |
-| `just test-e2e`             | <Status s="built" />    | Green against the compose stack, and the MVP item for it is met. The rails are WireMock hosts              |
-| Running against a real rail | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded using a separate `live` profile. The demo never leaves its stubs |
+| Part                        | Status                  | Evidence                                                                                                                                                                                                                                                      |
+| --------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate                                                                                                                                                      |
+| `just test-e2e`             | <Status s="built" />    | Green against the compose stack, and the MVP item for it is met. The rails are WireMock hosts                                                                                                                                                                 |
+| Running against a real rail | <Status s="unproven" /> | Sandboxes only, run as host processes and never by the demo: over seven MTN sandbox payments succeeded using a separate `live` profile, and Notch Pay's sandbox took three test-mode payments through the `notchpay` adapter. The demo never leaves its stubs |
 
-The full procedure, with a real run's output pasted in, is
+The Notch Pay run is recorded in
+[its step 5 verification page](vpay:docs/status/verification/2026-10-21-notchpay-step5.md):
+one payment succeeded, one failed, and one that Notch Pay read as `complete` for
+less than its amount was refused and stayed `pending`. No production rail has
+been called. The full demo procedure, with a real run's output pasted in, is
 [`docs/runbooks/demo.md`](vpay:docs/runbooks/demo.md).
 
 ## Go deeper

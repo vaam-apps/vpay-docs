@@ -7,6 +7,7 @@ status: partial
 sources:
   - docs/flows/crash-safety.md
   - docs/reference/vpay-worker.md
+  - docs/reference/vpay-api/confirm-path.md
   - docs/adr/0026-the-database-clock-schedules-jobs.md
   - docs/flows/adapter-notchpay.md
 skills:
@@ -67,6 +68,23 @@ sequenceDiagram
     S->>DB: charge submitted, intent processing
 ```
 
+The diagram shows the accepted case. Step 5 has two orders, chosen by the
+answer. An **accepted** submit records the row first and moves the charge
+second, so a crash between them is kill point 3: an answered row beside a
+`submitting` charge, which the worker reads as "the rail took it" and advances.
+A **declined** submit does the opposite: vpay fails the charge first (charge
+`failed`, intent back to `requires_payment_method` with the reason, one
+`payment_intent.payment_failed`, in one transaction) and only then records the
+row as answered
+([`finish_confirm`](vpay:backends/crates/vpay-api/src/v1/payment_intents.rs)).
+Recorded first, a crash or a refused settlement would leave that same answered
+row beside a `submitting` charge, and the worker would advance a charge the rail
+had refused. As it is, a refused settlement leaves the charge `submitting` and
+the row unanswered, which is what a crash before the answer leaves: the worker
+resubmits into the same decline and fails the charge itself. If the row cannot
+be completed after the decline has settled, the confirm still answers
+`409 charge_declined`; the failure is logged and the row stays pending.
+
 Every kill point leaves a committed charge **and** a job behind, because the job
 is committed in step 2's transaction. That is the reason it is enqueued there
 rather than beside step 5: kill points 1 and 2, precisely the recovery cases,
@@ -89,7 +107,9 @@ Pay's reference: it reads the payment rather than failing it. When the charge
 holds none, a crash fell between the first call and `submit` returning, and
 vpay cannot find the payment: the `409` is `Malformed`, the charge's fate is
 left unknown for an operator, and only Notch Pay's dashboard can tell whether
-the payer paid. That window is open, and Notch Pay offers no way to close it
+the payer paid. A resubmit refused that way is recorded as unanswered, so
+recovery keeps asking the rail rather than treating the charge as accepted. That
+window is open, and Notch Pay offers no way to close it
 ([the adapter flow](vpay:docs/flows/adapter-notchpay.md)).
 
 ### The retry rule
@@ -102,14 +122,15 @@ fresh reference on retry is how you double-charge a customer.
 ### Recovering a `submitting` charge
 
 `submitting` covers two physically different situations, and the worker tells
-them apart with `provider_requests`:
+them apart with `provider_requests`. It reads the latest **`submit`** row and
+nothing else:
 
 | Evidence                          | What happened                  | Action                                                                                                                               |
 | --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Charge younger than 60 s          | A confirm may still be running | **Wait** — reschedule once, for the rest of the window, and touch nothing                                                            |
 | No `provider_requests` row        | Crashed before the POST        | **Resubmit**, same reference                                                                                                         |
-| Row exists, `status_code IS NULL` | POST issued, response lost     | **Poll**. Only after 3 consecutive `NotFound` **and** at least 60 s, treat it as never received and resubmit with the same reference |
-| Row has a status code             | Normal path                    | Advance the bookkeeping from the code — no rail call                                                                                 |
+| Row exists, `status_code IS NULL` | POST issued, outcome unknown   | **Poll**. Only after 3 consecutive `NotFound` **and** at least 60 s, treat it as never received and resubmit with the same reference |
+| Row has a status code             | The rail answered              | Advance the bookkeeping from the code — no rail call                                                                                 |
 
 ```mermaid
 flowchart TD
@@ -119,6 +140,8 @@ flowchart TD
     F -->|redirect| D["fail it - provider_unavailable, intent back to requires_payment_method"]
     F -->|push| P{"latest provider_requests row"}
     P -->|none| RS["resubmit under the same reference"]
+    RS -->|"the rail declines it"| FD["fail the charge - payment_failed, intent back to requires_payment_method"]
+    RS -->|"the adapter refuses it, or the call fails"| Q
     P -->|"status_code IS NULL"| Q["poll the rail"]
     Q -->|"3 NotFound over 60 s or more"| RS
     Q -->|"any other answer"| ADV["advance from the rail's answer"]
@@ -143,6 +166,32 @@ Three details matter:
 The table is a pure function, `vpay_worker::recovery::recovery_step`, over the
 flow shape, the latest submit attempt, the `NotFound` streak, the charge's age
 and the window.
+
+Three more things about the rows it reads:
+
+- **`NULL` on a `submit` row means the outcome is unknown, not that the rail
+  said nothing.** A resubmit that ends in any error other than a decline is
+  written `NULL` with its `error_kind`: a transport failure, a misconfiguration,
+  or an answer the adapter refuses as `Malformed`, which Notch Pay's
+  unresolvable `409` and MTN's unfollowed `307` both are. The next poll then
+  reads the middle row and polls, instead of reading the bottom row and
+  advancing a charge whose fate nobody knows.
+- **A resubmit the rail declines ends the table for that charge.** The worker
+  fails it (charge `failed`, intent back to the payer with the reason, one
+  `payment_intent.payment_failed`) and only then marks the attempt row answered,
+  so no path leaves an answered row beside a `submitting` charge. A failed
+  charge is not polled, so nothing resubmits it again. The decline is trusted
+  because a resubmit happens only when the rail has no record of the reference,
+  and the port's contract is that a duplicate is reported as `Submitted`, never
+  as an error. A rail that declined a duplicate instead would break that
+  contract, and vpay would not see a payment the rail then took. No resubmit
+  has yet met a real rail.
+- **A status read is a different operation, and no row of this table reads
+  it.** A read the rail answered and the adapter refused is written with the
+  `0` sentinel and an `error_kind`, because `NULL` on a read would claim "no
+  answer" for an answer that came. A read that never reached the rail, or one
+  the rail answered with a `5xx`, stays `NULL`: the port cannot tell those
+  apart.
 
 ## Redirect rails (Orange Money): persist the token before redirect
 
@@ -212,7 +261,15 @@ dead-lettering.
   real handler against a WireMock rail. The decisive assertion is that every
   `provider_requests` row for the charge carries the **same**
   `provider_reference_id`. Unaged copies of the same fixtures assert that
-  nothing moves.
+  nothing moves. The same file pins how a refused attempt is recorded: a status
+  read the adapter refuses is answered and a `503` is not; a resubmit refused
+  as `Malformed` stays unanswered; a resubmit the rail declines fails the
+  charge, is recorded answered, and is not sent again by the poll that follows;
+  and a declined submit whose settlement was lost is failed by the worker.
+- **The confirm's order on a decline.** `confirm_rails.rs` makes Postgres
+  refuse the decline's settlement and asserts that the confirm leaves the
+  attempt unanswered, and makes the attempt row refuse its completion after a
+  settled decline and asserts that the merchant still gets the decline.
 - **Real `SIGKILL`s.** `worker_kill9.rs` spawns the shipping binary as real
   processes against real Postgres and WireMock and kills them with signal 9: a
   worker killed mid-poll (the charge settles exactly once after its lease is
@@ -223,14 +280,15 @@ dead-lettering.
 
 ## Status in this release
 
-| Part                                                 | Status                   | Evidence                                                                                                                                         |
-| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it`               |
-| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 23 cases against real Postgres                                                                                             |
-| Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                                       |
-| Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                                   |
-| Any kill case on Orange Money                        | <Status s="not-built" /> | Neither kill case exercises the redirect rail                                                                                                    |
-| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol. The MTN sandbox payments of 2026-09-15 exercised no recovery case |
+| Part                                                 | Status                   | Evidence                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it`                                                                                                                                                               |
+| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 28 cases against real Postgres, none ignored                                                                                                                                                                                                                               |
+| A declined submit fails the charge before its row    | <Status s="partial" />   | Same order in `vpay-api`'s confirm and the worker's resubmit (`a_decline_the_database_refuses_to_settle_leaves_the_attempt_unanswered`, `a_resubmit_the_rail_declines_fails_the_charge_and_is_recorded_as_answered`); proven against real Postgres, with the decline itself coming from WireMock |
+| Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                                                                                                                                                                                       |
+| Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                                                                                                                                                                                   |
+| Any kill case on Orange Money                        | <Status s="not-built" /> | Neither kill case exercises the redirect rail                                                                                                                                                                                                                                                    |
+| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol. Neither the MTN sandbox payments of 2026-09-15 nor Notch Pay's of 2026-10-21 exercised a recovery case                                                                                                            |
 
 What is proven is that vpay executes its recovery table correctly — not that the
 rails behave as vpay's documents claim. The full record is the status notes in

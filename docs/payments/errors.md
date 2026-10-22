@@ -138,7 +138,10 @@ Some leaf classifications worth knowing: `DbError::UniqueViolation` is
 `Conflict`/`resource_conflict` ("you already did this"), not `invalid_state`;
 `DbError::WriteMatchedNoRow` is `Internal` (only vpay's own code can cause it);
 `ProviderError::Transport` and `Malformed` are `Rail` and retried by the poll
-ladder; `ProviderError::Rejected` is `Conflict` with retry `NewAttempt`.
+ladder; `ProviderError::Rejected` is `Conflict` with retry `NewAttempt`, which
+the worker reads as `Terminal`: the job ends and is not re-run. A resubmit the
+rail declines has already failed the charge by the time its error is raised
+([crash safety](/payments/crash-safety#recovering-a-submitting-charge)).
 
 There is deliberately **no** `ProviderError::retryable()`. Retry policy is
 `Classify::retry`; a second oracle beside it is exactly what ADR-0011 exists to
