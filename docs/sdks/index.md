@@ -145,11 +145,12 @@ payments succeeded: a documented sandbox run minted a payment with
 `examples/checkout-browser/mint.mjs` through the Node SDK and confirmed it in
 the browser through `vpay-stripe-js`
 ([live sandbox test](/operate/runbooks#live-sandbox-test)). And Notch Pay's, on
-2026-10-21, when `examples/merchant-node` took three test-mode payments through
-the Node SDK to a local vpay whose `notchpay` adapter called Notch Pay: one
-succeeded, one failed, one stayed `pending`
+2026-10-21 and 2026-10-22, when `examples/merchant-node` took six test-mode
+payments through the Node SDK to a local vpay whose `notchpay` adapter called
+Notch Pay: two succeeded, three failed with the code vpay maps them to, and one
+collected less than its amount and was never counted as a success
 ([Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)).
-Neither is production, and the Notch Pay run used no payer-side client. The
+Neither is production, and the Notch Pay runs used no payer-side client. The
 matrix also has its own tables for the browser client, the Flutter plugin and
 the Tauri plugin; see their pages.
 
@@ -163,13 +164,13 @@ in vpay, not a parity gap.
 
 ## Status in this release
 
-| Part                                        | Status                  | Evidence                                                                                                                                                                                                                              |
-| ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                                                                                      |
-| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                                                                                         |
-| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                                                                                              |
-| Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate                                                                       |
-| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js`. On 2026-10-21 the Node SDK took three Notch Pay sandbox payments through vpay. No other rail, no production |
+| Part                                        | Status                  | Evidence                                                                                                                                                                                                                                    |
+| ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                                                                                            |
+| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                                                                                               |
+| Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                                                                                                    |
+| Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate                                                                             |
+| Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js`. On 2026-10-21 and -22 the Node SDK took six Notch Pay sandbox payments through vpay. No other rail, no production |
 
 See [docs/status.md](vpay:docs/status.md) for the repository-wide picture and
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md#gap-ledger) for every open gap.

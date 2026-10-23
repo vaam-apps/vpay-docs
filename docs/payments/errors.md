@@ -88,6 +88,7 @@ Some categories answer with more than their default `code`, while the status,
 | `Conflict`       | `invalid_state`, `resource_conflict` (it already exists), `charge_declined` (a rail's decision), `checkout_session_expired`, `checkout_session_complete` |
 | `Idempotency`    | `idempotency_key_in_use` (same key, different body), `idempotency_key_in_flight` (the first request has not finished)                                    |
 | `InvalidRequest` | `invalid_reference` (the request named a currency, provider or object that does not exist)                                                               |
+| `Rail`           | `charge_needs_reconciliation` (the rail answered, vpay understood it, and only a person can resolve it; severity `error`, not `warn`)                    |
 
 ::: info Why a decline is `charge_declined` and not the `FailureCode`
 A rail declining a charge is a business outcome, not a system failure. It is
@@ -138,7 +139,13 @@ Some leaf classifications worth knowing: `DbError::UniqueViolation` is
 `Conflict`/`resource_conflict` ("you already did this"), not `invalid_state`;
 `DbError::WriteMatchedNoRow` is `Internal` (only vpay's own code can cause it);
 `ProviderError::Transport` and `Malformed` are `Rail` and retried by the poll
-ladder; `ProviderError::Rejected` is `Conflict` with retry `NewAttempt`, which
+ladder; `ProviderError::NeedsReconciliation`, added by ADR-0011's 2026-10-23
+amendment, is `Rail` too, but with severity `error`: the API answers it as it
+answers a `Malformed`, `502` with the outcome unknown, and the worker escalates
+the charge to `unresolved` on the first one instead of retrying it
+([reconciler](/payments/reconciler)). That escalation is the one place a
+composite acts on a leaf's variant, and it is ADR-0011's documented exception.
+`ProviderError::Rejected` is `Conflict` with retry `NewAttempt`, which
 the worker reads as `Terminal`: the job ends and is not re-run. A resubmit the
 rail declines has already failed the charge by the time its error is raised
 ([crash safety](/payments/crash-safety#recovering-a-submitting-charge)).

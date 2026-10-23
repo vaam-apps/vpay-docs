@@ -130,6 +130,14 @@ Things worth knowing about them:
 - `amount` is a JSON **number** here (MTN's is a string).
 - `lang` is the one defaulted field in the body; it is `fr` when a deployment
   configures none.
+- **A charge that lost its `pay_token` goes to a person.** Orange will not
+  answer for an `order_id` alone, and the rail may well hold a payment for the
+  charge, so the read refuses before any request with
+  `ProviderError::NeedsReconciliation`, never `NotFound`. Since v0.11.0 the
+  worker makes such a charge `unresolved` at once, alerting, and keeps polling
+  it hourly ([reconciler](/payments/reconciler)). It was
+  `ProviderError::Config` before, which also stopped the polling: the poll job
+  was dead-lettered, so the charge never reached `unresolved`.
 - The `payment_url` is validated as `http(s)` and at most 2048 characters before
   it can reach a browser or the database, and a refusal never quotes it.
 - The bearer is cached behind a SHA-256 fingerprint of `client_id` +
@@ -239,6 +247,13 @@ confirm with Orange Cameroun" list:
 - The transfer product — which one, which endpoint, which body, which
   credential, what amount rules. This is what unblocks `orange_money::refund`.
 - The 401 → re-mint → retry path; only the token endpoint's own 401 is tested.
+
+The three notification questions — `pay_token`, `order_id` and resending — are
+[issue #331](https://github.com/vaam-apps/vpay/issues/331), a human test filed
+2026-10-22: three payments in Orange's `dev` environment whose notifications
+land on a request inspector. It is blocked until someone holds Orange Cameroun
+Web Payment credentials for `dev`; nobody on the project held them on
+2026-10-22.
 
 ## Status in this release
 
