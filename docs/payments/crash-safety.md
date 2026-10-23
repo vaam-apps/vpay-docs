@@ -10,6 +10,8 @@ sources:
   - docs/reference/vpay-api/confirm-path.md
   - docs/adr/0026-the-database-clock-schedules-jobs.md
   - docs/flows/adapter-notchpay.md
+  - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
+  - docs/status/verification/2026-10-23-two-step-submit.md
 skills:
   - vpay-reconciler
   - vpay-payments
@@ -29,7 +31,9 @@ The two flow shapes apply it at different moments, because the payer becomes
 able to act at different moments. On a **push** rail the payer can act as soon
 as the request leaves vpay, so the reference must be durable _before_ submit. On
 a **redirect** rail the payer can act only once they hold a URL, so the rail's
-token must be durable _before_ the redirect.
+token must be durable _before_ the redirect. A push rail that names the payment
+by **its own** reference, which Notch Pay does, needs a third arrangement: two
+calls with a commit between them.
 
 Agents working on this should load [vpay-reconciler](skill:vpay-reconciler).
 
@@ -97,20 +101,10 @@ computes `now() + grace`
 host whose clock runs behind or ahead of the database neither eats into nor
 stretches the grace. No ordering and no kill point changed with it.
 
-[Notch Pay](/rails/notchpay), the other push rail, creates the payment with the
-charge's own UUID, but since v0.9.1 it processes and reads it by **Notch Pay's**
-`trx.…` reference, because its sandbox answered `404` to anything else. That
-reference comes back only in the first call's answer and is kept as key
-material once `submit` returns. A duplicate submit answers `409`, which the
-adapter treats as the crash-retry case when the charge already holds Notch
-Pay's reference: it reads the payment rather than failing it. When the charge
-holds none, a crash fell between the first call and `submit` returning, and
-vpay cannot find the payment: the `409` is `Malformed`, the charge's fate is
-left unknown for an operator, and only Notch Pay's dashboard can tell whether
-the payer paid. A resubmit refused that way is recorded as unanswered, so
-recovery keeps asking the rail rather than treating the charge as accepted. That
-window is open, and Notch Pay offers no way to close it
-([the adapter flow](vpay:docs/flows/adapter-notchpay.md)).
+[Notch Pay](/rails/notchpay), the other push rail, cannot be called this way,
+because it names the payment by its own reference rather than vpay's; see
+[two-step push rails](#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)
+below.
 
 ### The retry rule
 
@@ -172,10 +166,13 @@ Three more things about the rows it reads:
 - **`NULL` on a `submit` row means the outcome is unknown, not that the rail
   said nothing.** A resubmit that ends in any error other than a decline is
   written `NULL` with its `error_kind`: a transport failure, a misconfiguration,
-  or an answer the adapter refuses as `Malformed`, which Notch Pay's
-  unresolvable `409` and MTN's unfollowed `307` both are. The next poll then
-  reads the middle row and polls, instead of reading the bottom row and
-  advancing a charge whose fate nobody knows.
+  an answer the adapter refuses as `Malformed`, which MTN's unfollowed `307` is,
+  or `NeedsReconciliation`, which Notch Pay's unresolvable `409` has been since
+  v0.11.0. The next poll then reads the middle row and polls, instead of reading
+  the bottom row and advancing a charge whose fate nobody knows. A
+  `NeedsReconciliation` resubmit also escalates the charge to `unresolved` at
+  once, so it is never resubmitted again
+  ([reconciler](/payments/reconciler#timers-assert-nothing)).
 - **A resubmit the rail declines ends the table for that charge.** The worker
   fails it (charge `failed`, intent back to the payer with the reason, one
   `payment_intent.payment_failed`) and only then marks the attempt row answered,
@@ -192,6 +189,77 @@ Three more things about the rows it reads:
   answer" for an answer that came. A read that never reached the rail, or one
   the rail answered with a `5xx`, stays `NULL`: the port cannot tell those
   apart.
+
+## Two-step push rails (Notch Pay): commit the rail's reference before the prompt
+
+Since v0.11.0
+([ADR-0032](vpay:docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md),
+whose status is still _Proposed_, pending the maintainer's acceptance). Notch
+Pay addresses a payment by its own `trx.…` reference, which exists only in the
+answer to its first call, initialize; the call that prompts the payer, process,
+and the status read both take that reference alone, and nothing finds a payment
+by vpay's. Neither shape above covers that: MTN's argument needs the name to be
+vpay's, and Orange's needs the payer's way in to be a URL vpay hands out. On
+Notch Pay the payer's way in is a USSD prompt, sent by the second call.
+
+Until v0.11.0 the adapter made both calls inside one `submit` and returned the
+`trx.…` for the core to commit afterwards, so a crash between the prompt and
+that commit left a payer holding a prompt for a payment vpay could never read.
+Now the rail declares `SubmitSteps::PrepareThenSubmit`, and the core splits the
+work into two port calls with a commit between them:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as vpay-server confirm
+    participant DB as Postgres
+    participant R as Notch Pay
+    S->>DB: COMMIT charge submitting with reference, plus poll_charge job
+    S->>DB: INSERT provider_requests prepare, status_code NULL
+    S->>R: prepare - POST /payments
+    R-->>S: trx reference, nobody prompted
+    S->>DB: COMMIT trx reference on the charge, prepare row answered
+    Note over S,DB: the prompt is sent only after this commit
+    S->>DB: INSERT provider_requests submit, status_code NULL
+    S->>R: submit - POST /payments/{trx}
+    R-->>S: 202, the payer is prompted
+    S->>DB: record status_code, charge submitted
+```
+
+**The `submit` row is the proof that nobody was prompted.** Every build writes
+one before every submit call, and since v0.11.0, on a two-step rail, it is
+written only after the reference is committed. So a `submitting` charge with no `submit` row was never
+prompted, on any build. A `prepare` row is never read as one. The worker's
+resubmit reads the same fact and hands it to the adapter:
+
+| Evidence                                          | What happened                                       | Action                                                                                                            |
+| ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| No `submit` row, no `trx.…`                       | Crashed before or during `prepare`; nobody prompted | **Resubmit**: `prepare`, commit, `submit`. A `409` here fails the charge cleanly                                  |
+| No `submit` row, `trx.…` held                     | Crashed after the commit; nobody prompted           | **Resubmit**: `submit` by the held reference, no second `prepare`                                                 |
+| `submit` row, `status_code IS NULL`, `trx.…` held | Prompt sent, answer lost                            | **Poll**, by the held reference, as for every rail                                                                |
+| `submit` row, `status_code IS NULL`, no `trx.…`   | A one-call build's submit, from before v0.11.0      | **Escalate** to `unresolved` for an operator: there is no reference to read by, and a second `prepare` is refused |
+
+The `409` in the first row means an earlier `prepare` created the payment on
+Notch Pay and lost its answer. Since nobody was prompted, the charge fails
+`provider_unavailable` through the same path a declined resubmit takes, and the
+payer can try again on a new charge. The payment left on Notch Pay expires
+there. Until it does, anyone holding the merchant's public key could process
+it, which is the exposure
+[ADR-0031](vpay:docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md)
+accepts.
+
+**A lost prompt answer is not re-prompted.** In the third row the read decides.
+If the prompt never reached Notch Pay the read says `pending`, and the charge
+waits for Notch Pay's expiry and fails `payer_timeout`: one payer's wait, no
+money. Re-sending the prompt from a poll is refused, because a prompt minutes
+later reaches a payer who has left.
+
+All of this is proven against WireMock and a real Postgres, **never against
+Notch Pay**: six two-step cases in `worker_recovery.rs`, one per row, one for
+a charge never sent, and the fourth row reached a second way, by its resubmit as
+well as its poll; and two in `confirm_rails.rs`, which assert the order of the
+rows and that a failed prompt leaves the charge holding its `trx.…`. The
+sandbox payments of 2026-10-21 and -22 ran the one-call build.
 
 ## Redirect rails (Orange Money): persist the token before redirect
 
@@ -266,6 +334,11 @@ dead-lettering.
   as `Malformed` stays unanswered; a resubmit the rail declines fails the
   charge, is recorded answered, and is not sent again by the poll that follows;
   and a declined submit whose settlement was lost is failed by the worker.
+- **The two-step order.** On Notch Pay, `worker_recovery.rs` drives each row of
+  [the two-step table](#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)
+  with the stub's request journal asserted, so a case fails if a prompt was
+  sent that should not have been; `confirm_rails.rs` asserts the confirm's row
+  order.
 - **The confirm's order on a decline.** `confirm_rails.rs` makes Postgres
   refuse the decline's settlement and asserts that the confirm leaves the
   attempt unanswered, and makes the attempt row refuse its completion after a
@@ -283,12 +356,13 @@ dead-lettering.
 | Part                                                 | Status                   | Evidence                                                                                                                                                                                                                                                                                         |
 | ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it`                                                                                                                                                               |
-| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 28 cases against real Postgres, none ignored                                                                                                                                                                                                                               |
+| Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 36 cases against real Postgres, none ignored                                                                                                                                                                                                                               |
+| Two-step submit on Notch Pay (ADR-0032)              | <Status s="partial" />   | Six cases in `worker_recovery.rs` and two in `confirm_rails.rs`, against WireMock's Notch Pay and a real Postgres; never against Notch Pay's sandbox; the ADR is _Proposed_                                                                                                                      |
 | A declined submit fails the charge before its row    | <Status s="partial" />   | Same order in `vpay-api`'s confirm and the worker's resubmit (`a_decline_the_database_refuses_to_settle_leaves_the_attempt_unanswered`, `a_resubmit_the_rail_declines_fails_the_charge_and_is_recorded_as_answered`); proven against real Postgres, with the decline itself coming from WireMock |
 | Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                                                                                                                                                                                       |
 | Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                                                                                                                                                                                   |
 | Any kill case on Orange Money                        | <Status s="not-built" /> | Neither kill case exercises the redirect rail                                                                                                                                                                                                                                                    |
-| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol. Neither the MTN sandbox payments of 2026-09-15 nor Notch Pay's of 2026-10-21 exercised a recovery case                                                                                                            |
+| Recovery against a real rail                         | <Status s="unproven" />  | Every recovery case is proven against a stub speaking the documented protocol. Neither the MTN sandbox payments of 2026-09-15 nor Notch Pay's of 2026-10-21 and -22 exercised a recovery case                                                                                                    |
 
 What is proven is that vpay executes its recovery table correctly — not that the
 rails behave as vpay's documents claim. The full record is the status notes in

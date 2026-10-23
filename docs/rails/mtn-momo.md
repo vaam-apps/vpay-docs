@@ -114,6 +114,11 @@ same bare `405` a `GET` does (a test pins the `GET`; none sends a `PUT`). If MTN
 sends `PUT`, every MTN callback is refused and, being sent once, lost. Nothing
 was changed for this: no MTN callback has ever reached vpay, and vpay's flow
 doc lists it as the first "to confirm with MTN" item.
+[Issue #330](https://github.com/vaam-apps/vpay/issues/330), filed 2026-10-22,
+is the human test that would settle it: three sandbox payments whose callbacks
+land on a request inspector, recording each one's method and body and whether a
+refused one is resent. Anyone with a Collections sandbox key can run it; nobody
+has yet.
 :::
 
 ## Credentials and tokens

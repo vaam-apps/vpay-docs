@@ -269,6 +269,14 @@ is reached by `pnpm -r` and is gated. For the rest, run
 by hand: none of them is in `just ci` or `just verify`. See
 [Tauri checkout](/checkout/tauri).
 
+The Helm chart's two recipes are outside `just ci` too, because each needs a
+binary the workspace does not build: `just helm-check` (`helm` and
+`kubeconform`, which fetches its schemas over the network) and, new in
+v0.11.0, `just test-alert-rules` (`helm` and `promtool`), which runs
+`promtool test rules` over a firing and a silent case for every alert the chart
+renders. CI's `deploy (helm chart)` job runs both. See
+[Deployment](/operate/deployment).
+
 ## What can go wrong
 
 | Symptom                                                                       | Cause and fix                                                                                                              |

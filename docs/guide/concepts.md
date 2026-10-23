@@ -16,6 +16,8 @@ sources:
   - docs/status/backend.md
   - docs/reference/vpay-worker.md
   - docs/status/verification/2026-10-21-notchpay-step5.md
+  - docs/status/verification/2026-10-22-notchpay-b3b.md
+  - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
 skills:
   - vpay-payments
   - vpay-reconciler
@@ -115,6 +117,9 @@ The core never asks _which_ rail it is talking to. It reads the rail's declared
 | `supports_refunds`         | `true`     | `true`         | `true`     |
 | `supports_partial_refunds` | `true`     | `false`        | `true`     |
 
+That is three of the nine the port declares; the others are listed on
+[the provider port](/rails/provider-port#branch-on-capabilities-never-on-provider-codes).
+
 Code outside an adapter crate that branches on a provider code, as in
 `if provider == "mtn_momo"`, is a defect. Adding a rail means making the one
 shared conformance suite pass, not writing a new suite.
@@ -165,6 +170,12 @@ can act at different moments.
   URL. So vpay **commits the rail's `pay_token` before the redirect**. If the
   submit response is lost, no payment can have happened.
 
+Notch Pay, a push rail, fits neither: it names a payment by its own reference,
+which exists only in the answer to its first call. Since <Release /> vpay calls
+it in two steps, with the reference committed after the first, which prompts
+nobody, and before the second, which prompts the payer. That is proven against
+WireMock and a real Postgres only.
+
 vpay also writes an attempt row before it calls a rail, and recovery reads that
 row back. An answered `submit` row on a `submitting` charge means "the rail took
 it", so the row is marked answered only when that is true. A submit the rail
@@ -209,32 +220,37 @@ every 120 seconds, then every 15 minutes out to 24 hours.
 ```mermaid
 flowchart LR
     A["confirm commits<br/>a poll_charge job"] --> B["poll on the ladder"]
-    B -->|"prompt TTL passes<br/>(default 900 s)"| C["processing, expired: true<br/>still polled"]
     B -->|"terminal answer"| E["succeeded or failed"]
-    C -->|"24 h still pending"| D["charge unresolved<br/>polled hourly + alert"]
-    C -->|"terminal answer"| E
+    B -->|"24 h still pending"| D["charge unresolved<br/>polled hourly + alert"]
+    B -->|"an answer only a person<br/>can settle (since v0.11.0)"| D
     D -->|"late answer"| E
 ```
 
+The design also marks a payer's prompt expired after `prompt_ttl_seconds`
+(default 900) and tells the merchant's UI to stop waiting. **That half is not
+built**: no column, no configuration key and no event exist at <Release />.
+
 A late success, at minute 40 or at hour 30, is normal. The intent stayed
 `processing` the whole time, so it moves to `succeeded` and emits a plain
-`payment_intent.succeeded`. A status read the adapter will not act on, such as a
-`complete` for less than the charge's amount, is refused as `Malformed` and
-settles nothing: the charge stays as it was and the polling goes on. Full page:
-[Reconciler](/payments/reconciler).
+`payment_intent.succeeded`. A status read the adapter cannot make sense of is
+refused as `Malformed` and settles nothing: the charge stays as it was and the
+polling goes on. A read it understood perfectly and cannot accept, such as a
+Notch Pay `complete` for less than the charge's amount, settles nothing either,
+and since <Release /> it makes the charge `unresolved` for a person at once
+instead of after 24 hours. Full page: [Reconciler](/payments/reconciler).
 
 ## Status in this release
 
-| Concept                        | Status                  | Evidence                                                                                                                                                                                                 |
-| ------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                                                                                           |
-| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                                                                                         |
-| Provider port and capabilities | <Status s="partial" />  | All three adapters pass the shared conformance suite, against WireMock containers. `mtn_momo` and `notchpay` have also met their rails' sandboxes through vpay, and `orange_money` has never been called |
-| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                                                                                                  |
-| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test                                                                                                      |
-| Reconciler                     | <Status s="partial" />  | Ladder, expiry and 24-hour escalation are built and tested. Rail evidence is WireMock, over seven successful MTN sandbox payments and three Notch Pay sandbox payments                                   |
-| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                                                                                               |
-| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                                                                                          |
+| Concept                        | Status                  | Evidence                                                                                                                                                                                                                                                                    |
+| ------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integer minor-unit money       | <Status s="built" />    | `Money` in `vpay-core`, float arithmetic denied workspace-wide                                                                                                                                                                                                              |
+| One charge per intent          | <Status s="built" />    | The unique index, proven against a real Postgres                                                                                                                                                                                                                            |
+| Provider port and capabilities | <Status s="partial" />  | All three adapters pass the shared conformance suite, against WireMock containers. `mtn_momo` and `notchpay` have also met their rails' sandboxes through vpay, and `orange_money` has never been called                                                                    |
+| Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                                                                                                                                                                     |
+| Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test. Notch Pay's two-step recovery is proven against WireMock and a real Postgres, not under a real signal                                                                  |
+| Reconciler                     | <Status s="partial" />  | Ladder and 24-hour escalation are built and tested, and so is the immediate escalation of an answer only a person can settle; the prompt-expiry rung is not built. Rail evidence is WireMock, over seven successful MTN sandbox payments and six Notch Pay sandbox payments |
+| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                                                                                                                                                                  |
+| Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                                                                                                                                                             |
 
 Each concept's own page carries the full record. The index of vpay's flow
 documents is [`docs/flows/README.md`](vpay:docs/flows/README.md).

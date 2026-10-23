@@ -253,7 +253,9 @@ stateDiagram-v2
 ### The screens, as vpay renders them
 
 These are screenshots of vpay's own checkout components, captured at v0.10.2
-from the checkout app's Storybook (`frontends/apps/checkout`, story file
+(between v0.10.2 and <Release /> the only change under `frontends/apps/checkout`
+is a Next.js patch, `^15.5.27` to `^15.5.28`, for a security advisory) from the
+checkout app's Storybook (`frontends/apps/checkout`, story file
 `checkout-screens.stories.tsx`), in headless Chrome on macOS at twice the pixel
 density. The page loads no web font, so its text is drawn in the device's own
 face, and the busy indicator is a shape that morphs as it turns, caught here at

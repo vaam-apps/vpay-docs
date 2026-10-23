@@ -17,6 +17,8 @@ sources:
   - docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md
   - docs/runbooks/migrations.md
   - docs/status/gates.md
+  - docs/runbooks/callback-endpoints.md
+  - deploy/helm/vpay/ci/prometheusrule.test.yaml
 skills:
   - vpay-ops
   - vpay-tooling
@@ -222,6 +224,17 @@ from the monitoring namespace only. **Nothing has ever scraped these metrics** �
 the `ServiceMonitor` and `PrometheusRule` are off by default and every alert
 threshold is proposed, not measured.
 
+The `PrometheusRule` carries six alerts. The sixth, new in v0.11.0, is
+`VpayCallbackEndpointUnconfirmed`: it fires when, for
+`metrics.prometheusRule.callbackEndpointWindow` (`3h`, proposed), no pass of the
+worker's `ensure:callbacks` job confirmed vpay's callback endpoint on a rail,
+read from `vpay_callback_endpoint_checks_total{provider,state}`, the fourteenth
+metric ([callback endpoints runbook](/operate/runbooks#callback-endpoints)).
+Since v0.11.0 `just test-alert-rules` renders all six and runs
+`promtool test rules` against a firing and a silent case for each, in CI's
+chart job. That proves each expression fires on the made-up series it is
+written for, and nothing about the series a running vpay emits.
+
 SIGTERM starts a drain bounded by `--shutdown-grace-seconds` (25 s). A non-zero
 exit at the deadline means work was cut off, not that shutdown failed. The
 chart's `grace-period` guard refuses to render unless
@@ -278,10 +291,11 @@ A `v*` tag also triggers
 that tells this documentation site a release landed (a `repository_dispatch` of
 type `vpay-release` to vaam-apps/vpay-docs). It has no `needs:` and no shared
 concurrency with `release.yml`, so it cannot hold up or fail a release, and a
-release that leaves these docs stale still ships. The release runbook, as of
-vpay <Release />, records it as not yet proven on a real tag, although a
-`vpay-release` dispatch has reached this site on each vpay tag date since
-v0.5.0 ([How these docs stay current](/about/parity)).
+release that leaves these docs stale still ships. The release runbook at <Release />
+records it as run on every `v*` tag from v0.5.0 to v0.10.2, each
+run followed by a `release-parity` dispatch here; this site's own runs show the
+same for v0.10.3, v0.10.4 and v0.11.0
+([How these docs stay current](/about/parity)).
 
 Installing from the registry takes the shape the chart README gives:
 
@@ -312,17 +326,17 @@ helm upgrade --install vpay oci://ghcr.io/vaam-apps/charts/vpay --version "$VERS
 
 ## Status in this release
 
-| Part                                             | Status                   | Evidence                                                                                    |
-| ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------- |
-| Images built, published, signed by `release.yml` | <Status s="partial" />   | Runs green on `master` and tags; no pull, no `cosign verify` ever                           |
-| Helm chart                                       | <Status s="unproven" />  | `just helm-check`: lint, renders, 24 named guards, kubeconform — never applied to a cluster |
-| Chart published to OCI registry                  | <Status s="partial" />   | Published and signed on a tag; signature never verified                                     |
-| Compose (local and CI)                           | <Status s="built" />     | Boots in CI's `e2e` job and `just demo`                                                     |
-| Metrics and alerts                               | <Status s="unproven" />  | Series emitted and asserted in tests; never scraped, no rule ever evaluated                 |
-| Management tier and autoscaling (ADR-0022)       | <Status s="unproven" />  | Rendered and guarded; the ADR is Proposed                                                   |
-| As a subchart of another chart                   | <Status s="partial" />   | A `file://` parent that sets `global` lints and renders in `just helm-check`                |
-| Staff SSO configuration and IdP egress           | <Status s="unproven" />  | Renders byte-identical without the block; never booted in a cluster or against a real IdP   |
-| Database backups                                 | <Status s="not-built" /> | ADR-0013 proposed; no backup has ever been taken                                            |
+| Part                                             | Status                   | Evidence                                                                                                                                                          |
+| ------------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Images built, published, signed by `release.yml` | <Status s="partial" />   | Runs green on `master` and tags; no pull, no `cosign verify` ever                                                                                                 |
+| Helm chart                                       | <Status s="unproven" />  | `just helm-check`: lint, renders, 24 named guards, kubeconform — never applied to a cluster                                                                       |
+| Chart published to OCI registry                  | <Status s="partial" />   | Published and signed on a tag; signature never verified                                                                                                           |
+| Compose (local and CI)                           | <Status s="built" />     | Boots in CI's `e2e` job and `just demo`                                                                                                                           |
+| Metrics and alerts                               | <Status s="unproven" />  | Series emitted and asserted in tests; the six rules tested by `promtool` against synthetic series in CI; never scraped, never evaluated against vpay's own series |
+| Management tier and autoscaling (ADR-0022)       | <Status s="unproven" />  | Rendered and guarded; the ADR is Proposed                                                                                                                         |
+| As a subchart of another chart                   | <Status s="partial" />   | A `file://` parent that sets `global` lints and renders in `just helm-check`                                                                                      |
+| Staff SSO configuration and IdP egress           | <Status s="unproven" />  | Renders byte-identical without the block; never booted in a cluster or against a real IdP                                                                         |
+| Database backups                                 | <Status s="not-built" /> | ADR-0013 proposed; no backup has ever been taken                                                                                                                  |
 
 The full record is the Status section of
 [docs/flows/deployment.md](vpay:docs/flows/deployment.md#status) and the chart's

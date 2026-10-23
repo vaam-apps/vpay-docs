@@ -10,6 +10,9 @@ sources:
   - docs/adr/0002-provider-port.md
   - docs/adr/0010-merchant-auth-private-key-jwt.md
   - docs/flows/payment-lifecycle.md
+  - docs/flows/adapter-notchpay.md
+  - docs/status.md
+  - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
 skills:
   - vpay
   - vpay-provider-adapters
@@ -30,9 +33,9 @@ architecture.
 vpay is no longer a scaffold. Its maintainers are testing it for live use on
 some clusters (the owner's statement, 2026-10-21); it is not yet generally
 available. No result from those tests is recorded at <Release />. Apart from
-over seven successful MTN **sandbox** payments on 2026-09-15 and three
-test-mode payments through Notch Pay's **sandbox** on 2026-10-21, its recorded
-payment evidence comes from WireMock stubs. Check a feature's status before
+over seven successful MTN **sandbox** payments on 2026-09-15 and six
+test-mode payments through Notch Pay's **sandbox** on 2026-10-21 and -22, its
+recorded payment evidence comes from WireMock stubs. Check a feature's status before
 relying on it. See [What works today](/guide/status).
 :::
 
@@ -63,10 +66,13 @@ picks between them using a **capability value** (`flow`), never a rail name.
 Notch Pay is a push rail too: its payer approves a prompt on their handset, so
 it follows the MTN column. It differs on one point that matters for crash
 safety: Notch Pay's reference exists only in its own answer, so vpay cannot
-save it before making the call. A crash after Notch Pay has prompted the payer
-and before `submit` returns leaves a payment vpay cannot read, and the
-charge's fate is left unknown for an operator, who can see the payment only in
-Notch Pay's dashboard ([the Notch Pay adapter](vpay:docs/flows/adapter-notchpay.md)).
+save it before asking for it. Since v0.11.0 vpay asks in two calls: the first
+creates the payment and prompts nobody, vpay commits the reference it
+returns, and only then does the second call prompt the payer
+([crash safety](/payments/crash-safety#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)).
+That split is proven against WireMock only. Until v0.11.0 one call did both,
+and a crash between the prompt and the commit left a payment vpay could not
+read.
 
 The last row matters more than the others. On a push rail the payer's phone
 starts buzzing as soon as vpay calls MTN, so vpay must save the reference
@@ -219,14 +225,14 @@ a provider code, as in `if provider == "mtn_momo"`, is a defect
 
 ## Status in this release
 
-| Part                                  | Status                   | Evidence                                                                                                                                                                                                               |
-| ------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container                                                                                                                         |
-| MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved                                                                                                                           |
-| Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                                                                                                                                                  |
-| Notch Pay                             | <Status s="partial" />   | New in v0.9.0. Three test-mode payments went through its sandbox on 2026-10-21: one succeeded, one failed, one read as paid short stayed `pending`. No webhook, no refund (`notchpay::refund` is a token), no live key |
-| Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything                                                                                                                               |
-| A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. Cluster tests reported 2026-10-21; no result on record                                                                                                                 |
+| Part                                  | Status                   | Evidence                                                                                                                                                                                                                                                                                          |
+| ------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| End-to-end payment against stub rails | <Status s="partial" />   | `just demo` walks six payments on both rails. Every rail in those runs is a WireMock container                                                                                                                                                                                                    |
+| MTN MoMo charge path                  | <Status s="partial" />   | Over seven EUR sandbox payments succeeded on 2026-09-15, using a test number; no money moved                                                                                                                                                                                                      |
+| Orange Money                          | <Status s="unproven" />  | Wire calls proven against WireMock only. Orange has never been called                                                                                                                                                                                                                             |
+| Notch Pay                             | <Status s="partial" />   | New in v0.9.0. Six test-mode payments went through its sandbox on 2026-10-21 and -22: two succeeded, three failed with the mapped code, one read as paid short was never counted as a success. No webhook, no refund (`notchpay::refund` is a token, and the sandbox answered `403`), no live key |
+| Refunds                               | <Status s="unproven" />  | Routes exist. Nothing settles a `pending` refund, and no rail has ever refunded anything                                                                                                                                                                                                          |
+| A deployment                          | <Status s="not-built" /> | The Helm chart renders and is schema-validated. Cluster tests reported 2026-10-21; no result on record                                                                                                                                                                                            |
 
 See [What works today](/guide/status) for the full picture, and
 [`docs/status.md`](vpay:docs/status.md) for the record.

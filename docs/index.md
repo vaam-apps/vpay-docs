@@ -27,9 +27,9 @@ features:
     title: Payments that survive a crash
     details:
       One charge per intent, forever. vpay writes the rail's reference down
-      before the payer can act, except on Notch Pay, whose reference exists
-      only in its own answer. Only the rail's authenticated status query moves
-      money.
+      before the payer can act. On Notch Pay, whose reference exists only in
+      its own answer, that has taken two calls with a commit between them
+      since v0.11.0. Only the rail's authenticated status query moves money.
     link: /payments/lifecycle
     linkText: Payment lifecycle
   - icon: 📱
@@ -62,9 +62,10 @@ vpay is no longer a scaffold. Its maintainers are testing it for live use on
 some clusters (the owner's statement, 2026-10-21), ahead of general
 availability. What the evidence at <Release /> shows is narrower: over seven
 payments settled against **MTN's real sandbox** on 2026-09-15, using a test
-number the sandbox settles by itself, and three test-mode payments went
-through vpay's Notch Pay adapter to **Notch Pay's real sandbox** on 2026-10-21
-(one succeeded, one failed, and one Notch Pay read as paid for less than its amount stayed `pending`). No result from
+number the sandbox settles by itself, and six test-mode payments went through
+vpay's Notch Pay adapter to **Notch Pay's real sandbox** on 2026-10-21 and -22
+(two succeeded, three failed with the code vpay maps them to, and one Notch Pay
+read as paid for less than its amount was never counted as a success). No result from
 the cluster tests is recorded yet, and everything this site marks unproven is
 still unproven: vpay's own record still shows no real payer prompted, no call
 to Orange's own API, no call to a production rail, and no refund settled. Check
