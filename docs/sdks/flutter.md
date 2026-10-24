@@ -10,6 +10,7 @@ sources:
   - docs/adr/0021-flutter-checkout-plugin.md
   - docs/flows/mobile-checkout.md
   - docs/sdks/parity.md
+  - docs/status/verification/2026-10-24-rail-on-v1.md
 skills:
   - vpay-sdks
   - vpay-checkout
@@ -181,6 +182,7 @@ Apple's guidelines as read on 2026-09-13; it is not legal advice. See
 | macOS                                                                | <Status s="unproven" />  | Compiled by nobody                                                                                                                                   |
 | Deep-link return (App Links, Universal Links)                        | <Status s="not-built" /> | Wired, never driven; needs a merchant-hosted origin                                                                                                  |
 | CI gate                                                              | <Status s="not-built" /> | No Flutter recipe is in `just ci`                                                                                                                    |
+| `payment_method_details` on the polled intent (v0.14.0)              | <Status s="not-built" /> | The plugin's models read the thirteen keys they name and ignore this one; no Dart toolchain was available to add it                                  |
 | Against a real rail                                                  | <Status s="unproven" />  | Every stack it has met used WireMock rails                                                                                                           |
 
 Every one of those walks was driven by a human, not by a gate, and against
