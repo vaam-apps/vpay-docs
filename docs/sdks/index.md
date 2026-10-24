@@ -170,11 +170,14 @@ older one refuses it as an unknown rail. See
 the rail is picked, and
 [merchant-sdks.md](vpay:docs/status/merchant-sdks.md) for the dated gap.
 
-A refund's `destination` names the rail with the same `PaymentMethodType`, so
-`mtn_wallet` there type-checks in both SDKs, and the server refuses it with a
-`400` naming `destination`: pass the code of the rail the charge was made on.
-For a charge the server routed, no `/v1` object says which rail that is, a gap
-vpay records ([the merchant API](/api/#payment-method-types-and-routing)).
+A refund's `destination` is keyed with the same `PaymentMethodType`. Since
+v0.13.0 the server accepts either the code of the rail the charge was made on
+or the payment-method type the charge records, so `mtn_wallet` refunds a charge
+routed by `mtn_wallet`; another type, or a type on an older server, is a `400`
+naming `destination`. That is how to refund a routed charge, because no `/v1`
+object says which rail it went to
+([the merchant API](/api/#payment-method-types-and-routing)). Both SDKs' doc
+comments say so since v0.13.0; no signature changed.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:

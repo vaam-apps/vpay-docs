@@ -141,7 +141,8 @@ transaction. The ranking today has one provisional component, a weight the
 operator configures; the fee is the next component, and is not built. No
 measured quantity moves traffic on its own. A decline never moves the intent
 to another rail. The decision is not on any `/v1` object yet, and neither SDK
-can send a confirm by type. Full pages: [the merchant API](/api/) and
+can send a confirm by type. Since v0.13.0 a routed charge can be refunded under
+its type, so a merchant need not know which rail won. Full pages: [the merchant API](/api/) and
 [the provider port](/rails/provider-port).
 
 ## Callbacks are hints
@@ -164,7 +165,9 @@ counts is an open question. Full page: [Reconciler](/payments/reconciler).
 
 ::: warning Never received from a real rail
 The callback route and Notch Pay's signature check are proven against WireMock.
-MTN, Orange and Notch Pay have never called the route.
+MTN, Orange and Notch Pay have never called the route. On 2026-10-24 Notch
+Pay's sandbox delivered four webhooks to a capture endpoint registered in its
+dashboard, and the signature check verified them offline; none reached vpay.
 :::
 
 ## One charge per intent
@@ -272,7 +275,7 @@ instead of after 24 hours. Full page: [Reconciler](/payments/reconciler).
 | Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                                                                                                                                                                     |
 | Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test. Notch Pay's two-step recovery is proven against WireMock and a real Postgres, not under a real signal                                                                  |
 | Reconciler                     | <Status s="partial" />  | Ladder and 24-hour escalation are built and tested, and so is the immediate escalation of an answer only a person can settle; the prompt-expiry rung is not built. Rail evidence is WireMock, over seven successful MTN sandbox payments and six Notch Pay sandbox payments |
-| Callbacks as hints             | <Status s="unproven" /> | Route and Notch Pay's signature check proven against WireMock, never called by a real rail                                                                                                                                                                                  |
+| Callbacks as hints             | <Status s="unproven" /> | Route and Notch Pay's signature check proven against WireMock; the check verified four real Notch Pay sandbox webhooks offline (2026-10-24); the route has never been called by a real rail                                                                                 |
 | Payment-method types           | <Status s="partial" />  | Types, the router and the recorded decision proven against WireMock and a real Postgres; one provisional score component; the checkout page's rendering of a type is untested, and the SDKs cannot send one                                                                 |
 | Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                                                                                                                                                             |
 

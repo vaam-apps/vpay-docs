@@ -230,13 +230,17 @@ What a merchant should know before relying on it:
   and proven in vpay against a stub of it.
 - **The decision is not on the API.** The chosen rail, the type and the
   ranking are recorded in vpay's database, on no `/v1` object.
-- **A routed charge is refunded under its rail's code**, which `/v1` does not
-  show. `POST /v1/refunds` wants `destination[mtn_momo][msisdn]`, never
-  `destination[mtn_wallet][…]` (a `400` naming `destination`), so refunding a
-  routed charge that landed on `mtn_momo` or `orange_money` means knowing which
-  rail won. vpay records this as a gap and has not decided whether the route
-  should also accept the method type or `/v1` should name the rail
-  ([verification](vpay:docs/status/verification/2026-10-23-method-type-routing.md)).
+- **A routed charge is refunded under its method type or its rail's code.**
+  Since v0.13.0 `POST /v1/refunds` accepts
+  `destination[<the charge's method type>][…]`, such as
+  `destination[mtn_wallet][msisdn]`, beside `destination[<rail code>][…]`, so
+  refunding a routed charge no longer means knowing which rail won. The type is
+  the one the charge records: set on every routed charge, and on a rail-code
+  charge whose rail serves one type. Another type, a type on a charge that
+  records none, or both keys at once is a `400` naming `destination`. **The
+  rail itself is still on no `/v1` object**; showing it is the other half of the
+  maintainer's decision, and it is not in this release
+  ([verification](vpay:docs/status/verification/2026-10-24-refund-by-method-type.md)).
 - **Neither SDK can send a confirm by type or a pin** yet
   ([SDK parity](vpay:docs/sdks/parity.md)). The checkout session's browser
   answer offers a type as one entry, flowing as its first-ranked rail; the
@@ -336,8 +340,9 @@ transaction, and instructed the rail. It does **not** mean money moved:
 
 `destination[<rail code>][msisdn]` is required on MTN and Orange (a refund
 there is an outbound transfer and needs a payee). The key is the charge's
-**rail** code, such as `destination[mtn_momo][msisdn]`, never a payment-method
-type such as `mtn_wallet`. Notch Pay refunds to
+**rail** code, such as `destination[mtn_momo][msisdn]`, or, since v0.13.0, the
+payment-method type the charge records, such as `destination[mtn_wallet][msisdn]`;
+never another type, and never both. Notch Pay refunds to
 the instrument that paid, so a `destination` sent for it is a `400` naming
 `destination`, before the token is reached. And
 `POST /v1/refunds/{id}/cancel` in practice refuses every refund the create route

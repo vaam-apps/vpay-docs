@@ -20,6 +20,7 @@ sources:
   - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
   - docs/status/verification/2026-10-23-notchpay-defaults-and-wrong-network.md
   - docs/status/verification/2026-10-23-webhook-signatures.md
+  - docs/status/verification/2026-10-24-notchpay-dashboard-webhooks.md
   - docs/status/verification/2026-10-23-method-type-routing.md
   - docs/status/providers.md
   - docs/reference/vpay-notchpay.md
@@ -68,11 +69,11 @@ maintainer's own machine), on Notch Pay's documented sandbox outcome numbers:
 No real payer was prompted and no real money moved. **Still not proven:**
 
 - Notch Pay's production, or any live key.
-- A webhook: none has ever been delivered. An endpoint the probe created
-  through Notch Pay's API, at a public URL, was stored with no URL and
-  received nothing. vpay's own endpoint registration has never run against a
-  real Notch Pay account, and its signature check has never checked a webhook
-  Notch Pay sent.
+- A webhook through vpay: none has reached a running vpay. An endpoint the
+  probe created through Notch Pay's API, at a public URL, received nothing; one
+  the maintainer registered in the dashboard received four signed webhooks on
+  2026-10-24, which vpay's signature check verified offline. vpay's own
+  endpoint registration has never run against a real Notch Pay account.
 - Any refund. `notchpay::refund` is `ProviderError::NotImplemented`, and the
   sandbox answered `403` to every `POST /refunds` the probe made.
 - What changed on 2026-10-23, through vpay: the two-step submit, the channel
@@ -157,7 +158,7 @@ sequenceDiagram
     participant N as Notch Pay
     participant P as Payer handset
     participant W as vpay worker
-    Note over A,N: The wire calls have met Notch Pay's real sandbox through vpay (six payments, 2026-10-21 and -22) and WireMock. vpay's two port calls and per-network channels have met WireMock only; the probe measured Notch Pay's side of both. Production never. No webhook has ever been delivered.
+    Note over A,N: The wire calls have met Notch Pay's real sandbox through vpay (six payments, 2026-10-21 and -22) and WireMock. vpay's two port calls and per-network channels have met WireMock only; the probe measured Notch Pay's side of both. Production never. No webhook has reached a running vpay; four reached a dashboard-registered capture endpoint on 2026-10-24.
     API->>A: prepare(charge, config)
     A->>N: POST /payments (amount, XAF, phone, reference = charge UUID)
     N-->>A: 201 pending, reference trx.…, trxref = charge UUID
@@ -168,7 +169,7 @@ sequenceDiagram
     N->>P: USSD prompt
     N-->>A: 202
     A-->>API: Submitted (no redirect)
-    opt webhook (a hint only, never delivered)
+    opt webhook (a hint only; none has reached vpay yet)
         N->>API: POST /provider/notchpay/callback
         API->>A: verify_callback(headers, raw body)
         A-->>API: Verified, Invalid or NoSecret
@@ -370,19 +371,27 @@ a webhook endpoint at `{public_base_url}/provider/notchpay/callback`.
 declares that default (`ProviderAdapter::default_callback_registration`), the
 worker logs one `info` line saying so at start, and no pass lists or creates
 anything on the account. The operator who wants callbacks registers vpay's URL
-in Notch Pay's dashboard for the five payment events. That route is unmeasured
-too: nothing has been delivered to vpay by either.
+in Notch Pay's dashboard for the five payment events. That route delivers: on
+2026-10-24 an endpoint the maintainer registered there, at a capture inbox
+rather than vpay, received four signed payment webhooks for two sandbox
+payments ([verification](vpay:docs/status/verification/2026-10-24-notchpay-dashboard-webhooks.md)).
+Nothing has been delivered to a running vpay by either route.
 
 The maintainer chose this default after the sandbox run of 2026-10-23
 ([verification](vpay:docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md)).
 The probe created an endpoint through `POST /webhooks`, the call vpay's own
-registration makes, at a public URL that could receive. Notch Pay stored it
+registration makes, at a public URL that could receive. Notch Pay listed it
 with `"url": null`, nothing reached the URL in 21 minutes, and `GET`, `PUT` and
 `DELETE /webhooks/{id}` all answered `404`, so the endpoint could not be read,
 repaired or removed through the API. Four payments processed after it existed
 stayed `processing` for 3 to 55 minutes, where eleven before it settled in
 about 5 seconds. That is a correlation, not a shown cause, and one more reason
-not to write to a merchant's account unasked.
+not to write to a merchant's account unasked. Two things were corrected on
+2026-10-24: the listing shows `"url": null` for the dashboard endpoint that
+delivers too, so the null is how the API lists every endpoint, not proof the
+URL was dropped; and with the API-created endpoint deleted in the dashboard,
+two payments were final within about 5 seconds, consistent with it having
+caused the stall and still a correlation.
 
 An explicit `register:` always wins
 ([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)):
@@ -408,10 +417,13 @@ including that an unset `register` sends nothing to the account, and has never
 run against a real Notch Pay account.**
 
 The endpoint is optional for correctness: in every sandbox run the worker's
-authenticated read settled the payment, and no webhook was delivered. Notch
+authenticated read settled the payment, and no webhook reached vpay. Notch
 Pay's own reference asks a receiver for a `200` so that it does not retry, and
 vpay answers `202`; whether Notch Pay counts that as delivered is an open
-question.
+question. Saving an endpoint in the dashboard also sends it an unsigned
+`verification.test` ping, which is not a payment event: vpay answers it
+`400`, and whether Notch Pay needs a `2xx` there to keep the endpoint is not
+known.
 
 ## Webhook signatures
 
@@ -441,16 +453,31 @@ the Hash Key was rotated in the dashboard and not in the Secret. No header
 value, body byte or secret is logged. A webhook that passes is still only a
 hint: the authenticated read is what moves money.
 
-**Stub-proven, and never checked against a webhook Notch Pay sent**
-([verification](vpay:docs/status/verification/2026-10-23-webhook-signatures.md)).
-The scheme was transcribed from Notch Pay's guide, which signs the raw body in
-its PHP and Python examples but `JSON.stringify(req.body)` in its Node one.
-Those are the same bytes only for a body Notch Pay serialised compactly itself.
-If the real scheme differs, every genuine webhook reads `Invalid`, and the cost
-is latency: the poll ladder still settles each charge. The signature carries no
-timestamp, so a captured genuine webhook verifies again; all it can do is pull
-that charge's poll forward. Checking a real webhook needs the Hash Key **and**
-an endpoint Notch Pay actually delivers to, and none has been delivered yet.
+**Verified offline against four real deliveries, never through a running
+vpay** ([verification](vpay:docs/status/verification/2026-10-24-notchpay-dashboard-webhooks.md)).
+On 2026-10-24 a capture endpoint registered in Notch Pay's dashboard recorded
+four signed payment webhooks. Each `x-notch-signature` is 64 lower-case hex
+characters, the HMAC-SHA256 of the **raw body** under the Hash Key: it matched
+on all four, and an HMAC over a `JSON.stringify` of the parsed body matched
+none, because Notch Pay escapes `/` as `\/` and a re-serialisation writes a
+bare `/`. So the Node example in Notch Pay's guide, which signs
+`JSON.stringify(req.body)`, would refuse genuine webhooks; vpay's check, over
+the bytes the route received, does not. Handed the recorded bodies and
+headers, the adapter's `verify_callback` answered `Verified` for all four
+under the real Hash Key and `Invalid` under the test suite's secret. None of
+them went through a running vpay's route. The signature carries no
+timestamp, so a captured genuine webhook verifies again; all it can do is
+pull that charge's poll forward.
+
+**Before v0.13.0, vpay could not read a real Notch Pay webhook.** The
+deliveries name the event under `event`
+(`{ "id": "whc_test.…", "event": "payment.complete", "data": {…} }`), not the
+documented `type`, and the adapter read `type` only, so it refused all four as
+`Malformed` and the route would have answered each `400`. Since v0.13.0 it
+reads `event` first, then `type`; tests built from the delivered bodies prove
+it. No money depended on it, because the poll ladder settles every charge
+without a callback, but **an operator registering a dashboard endpoint should
+run v0.13.0 or later**.
 
 ## Refunds: `NotImplemented`
 
@@ -473,28 +500,30 @@ on 2026-10-23: the payment it meant to refund stayed `processing`.
 
 ## Status in this release
 
-| Part                                       | Status                   | Evidence                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Submit and status read                     | <Status s="partial" />   | Six payments through the adapter against Notch Pay's real sandbox on 2026-10-21 and -22 (MTN and Orange outcome numbers, `cm.mobile`, XAF): two succeeded, three failed with the mapped code, one short collection was refused. The conformance suite's `notchpay` row is a WireMock stub         |
-| Addressing by Notch Pay's `trx.…`          | <Status s="partial" />   | Met Notch Pay in all six runs: every charge held it after submit and every read by it was answered                                                                                                                                                                                                |
-| The two-step submit (ADR-0032)             | <Status s="unproven" />  | Proven against WireMock and a real Postgres, each guard mutation-checked; vpay's two port calls have not met Notch Pay. The probe measured Notch Pay's side on 2026-10-23: an unprocessed payment stays `pending` for at least an hour, and a process 300 s late completes                        |
-| A short collection is never a success      | <Status s="partial" />   | Refused on eleven reads of a real sandbox answer. Since 2026-10-23 it escalates to `unresolved` on the first such read, proven against WireMock and a real Postgres, not observed with Notch Pay                                                                                                  |
-| Callback registration (RFC-0013)           | <Status s="unproven" />  | `off` on this rail unless `register` says otherwise. Proven against WireMock and a real Postgres, including that an unset `register` asks the account nothing; never run against a real Notch Pay account. The probe's endpoint, created through the same API, stored no URL and received nothing |
-| Callback parsing                           | <Status s="unproven" />  | Parsed in conformance; no webhook has ever been delivered by Notch Pay                                                                                                                                                                                                                            |
-| Boot rules and the exposure warning        | <Status s="built" />     | Tested in process, by running the real binary on a Notch Pay fixture configuration, and logged at every sandbox run's boot by both the server and the worker. The signing-secret rules are tested in process only                                                                                 |
-| Webhook signature check (RFC-0014)         | <Status s="unproven" />  | The adapter's unit tests, the conformance case `a_forged_callback_is_refused_by_a_rail_that_checks`, and `a_webhook_the_rail_did_not_sign_moves_nothing_and_a_signed_one_settles` against WireMock and a real Postgres, each guard mutation-checked; never run on a webhook Notch Pay sent        |
-| `refund`                                   | <Status s="not-built" /> | `NotImplemented("notchpay::refund")`; the sandbox answered `403` to `POST /refunds`                                                                                                                                                                                                               |
-| `cm.mtn` and `cm.orange` channels          | <Status s="unproven" />  | Chosen from the payer's network; proven against WireMock by the stub's request journal. vpay has not sent either to Notch Pay; the probe ran every outcome number on both on 2026-10-23                                                                                                           |
-| A wrong-network number is `invalid_payer`  | <Status s="unproven" />  | Proven against WireMock by `notchpay_a_number_on_the_other_network_is_an_invalid_payer`, whose stub answers what the sandbox answered the probe; vpay has not sent such a number to Notch Pay                                                                                                     |
-| Production and a live key                  | <Status s="unproven" />  | Never called; a live key's prefix is a written question to Notch Pay                                                                                                                                                                                                                              |
-| Wired into the compose, demo or e2e stacks | <Status s="not-built" /> | The block in `config/application.yml` is commented out. The real runs used the `notchpay-sandbox` profile on the maintainer's machine                                                                                                                                                             |
+| Part                                       | Status                   | Evidence                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Submit and status read                     | <Status s="partial" />   | Six payments through the adapter against Notch Pay's real sandbox on 2026-10-21 and -22 (MTN and Orange outcome numbers, `cm.mobile`, XAF): two succeeded, three failed with the mapped code, one short collection was refused. The conformance suite's `notchpay` row is a WireMock stub                                                                   |
+| Addressing by Notch Pay's `trx.…`          | <Status s="partial" />   | Met Notch Pay in all six runs: every charge held it after submit and every read by it was answered                                                                                                                                                                                                                                                          |
+| The two-step submit (ADR-0032)             | <Status s="unproven" />  | Proven against WireMock and a real Postgres, each guard mutation-checked; vpay's two port calls have not met Notch Pay. The probe measured Notch Pay's side on 2026-10-23: an unprocessed payment stays `pending` for at least an hour, and a process 300 s late completes                                                                                  |
+| A short collection is never a success      | <Status s="partial" />   | Refused on eleven reads of a real sandbox answer. Since 2026-10-23 it escalates to `unresolved` on the first such read, proven against WireMock and a real Postgres, not observed with Notch Pay                                                                                                                                                            |
+| Callback registration (RFC-0013)           | <Status s="unproven" />  | `off` on this rail unless `register` says otherwise. Proven against WireMock and a real Postgres, including that an unset `register` asks the account nothing; never run against a real Notch Pay account. The probe's endpoint, created through the same API, received nothing; one registered in the dashboard delivers (2026-10-24)                      |
+| Callback parsing                           | <Status s="partial" />   | Since v0.13.0 the adapter reads the event under `event`, as the four webhooks the sandbox delivered on 2026-10-24 name it; tests built from those bodies, mutation-checked. Before v0.13.0 it refused them. No webhook has reached a running vpay's route                                                                                                   |
+| Boot rules and the exposure warning        | <Status s="built" />     | Tested in process, by running the real binary on a Notch Pay fixture configuration, and logged at every sandbox run's boot by both the server and the worker. The signing-secret rules are tested in process only                                                                                                                                           |
+| Webhook signature check (RFC-0014)         | <Status s="partial" />   | The adapter's unit tests, the conformance case `a_forged_callback_is_refused_by_a_rail_that_checks`, and `a_webhook_the_rail_did_not_sign_moves_nothing_and_a_signed_one_settles` against WireMock and a real Postgres, each guard mutation-checked; on 2026-10-24, offline, `Verified` on four real sandbox webhooks. Never through a running vpay's route |
+| `refund`                                   | <Status s="not-built" /> | `NotImplemented("notchpay::refund")`; the sandbox answered `403` to `POST /refunds`                                                                                                                                                                                                                                                                         |
+| `cm.mtn` and `cm.orange` channels          | <Status s="unproven" />  | Chosen from the payer's network; proven against WireMock by the stub's request journal. vpay has not sent either to Notch Pay; the probe ran every outcome number on both on 2026-10-23                                                                                                                                                                     |
+| A wrong-network number is `invalid_payer`  | <Status s="unproven" />  | Proven against WireMock by `notchpay_a_number_on_the_other_network_is_an_invalid_payer`, whose stub answers what the sandbox answered the probe; vpay has not sent such a number to Notch Pay                                                                                                                                                               |
+| Production and a live key                  | <Status s="unproven" />  | Never called; a live key's prefix is a written question to Notch Pay                                                                                                                                                                                                                                                                                        |
+| Wired into the compose, demo or e2e stacks | <Status s="not-built" /> | The block in `config/application.yml` is commented out. The real runs used the `notchpay-sandbox` profile on the maintainer's machine                                                                                                                                                                                                                       |
 
 The runs are described in
 [the runbook section](/operate/runbooks#test-notch-pay-against-its-sandbox):
 Part A (the probe) and Part B (vpay itself, steps 5 and B3b). The probe's
 2026-10-23 phases measured the two-step split and the per-network channels on
-Notch Pay's side. None received a webhook, so Notch Pay's signature has not
-been measured.
+Notch Pay's side. None received a webhook. The probe's
+`dashboard-deliveries` phase (runbook A8) recorded the first four on
+2026-10-24, at a capture endpoint registered in the dashboard: they measured
+the signature and found the `event` key.
 
 ## Go deeper
 

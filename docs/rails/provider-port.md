@@ -265,10 +265,12 @@ pulled forward as before, and a livemode deployment refuses to boot that way
 unless it says `callbacks: { verify: off }`. A rail that declares a check but
 keeps the default `NotChecked` is answered `Unavailable` by the route, so a
 missing check fails closed. Every verdict is counted on
-`vpay_provider_callbacks_total{provider,verdict}`. The check is stub-proven,
-against WireMock and a real Postgres, on a scheme transcribed from Notch Pay's
-guide: **no real Notch Pay webhook has ever been checked**, because none has
-ever reached vpay.
+`vpay_provider_callbacks_total{provider,verdict}`. The check is proven against
+WireMock and a real Postgres, and on 2026-10-24 it answered `Verified` for four
+real Notch Pay webhooks that a dashboard-registered capture endpoint recorded,
+run offline over the recorded requests: they confirmed the signature is over
+the raw body ([verification](vpay:docs/status/verification/2026-10-24-notchpay-dashboard-webhooks.md)).
+**No Notch Pay webhook has reached a running vpay's route.**
 
 ```mermaid
 sequenceDiagram
@@ -410,7 +412,7 @@ reconciler", the port leaked.
 | The trait, capabilities and `Measured` decorator   | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                                                                                                                                      |
 | Shared conformance suite over all three rails      | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                                                                                                                                 |
 | Callback route as a hint                           | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit. MTN's HTTP method and whether Orange's body carries `order_id` are open                                                                                                                            |
-| `verify_callback` and `callback_check`             | <Status s="unproven" />  | Stub-proven: Notch Pay's signature check (a scheme transcribed from its "Verify webhooks" guide), the boot refusals and the verdict counter, against WireMock and a real Postgres. No real Notch Pay webhook has ever been received or checked                   |
+| `verify_callback` and `callback_check`             | <Status s="partial" />   | Notch Pay's signature check, the boot refusals and the verdict counter, against WireMock and a real Postgres; on 2026-10-24 the check answered `Verified`, offline, for four real sandbox webhooks. None has reached a running vpay's route                      |
 | Orange `notif_token` comparison on callbacks       | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                                                                                                                                     |
 | MTN charge path over the port                      | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                                                                                                                                              |
 | Orange over the port                               | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                                                                                                                                      |
