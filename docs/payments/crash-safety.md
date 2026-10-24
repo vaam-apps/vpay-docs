@@ -274,7 +274,9 @@ rather than vpay, which cannot reach Notch Pay from the session that ran it
   worker's resubmit of a `prepare`d charge expects.
 - A process 3600 s late was accepted (`202`), but whether it would complete is
   not shown: the payment stalled in `processing`, as others in the same session
-  did.
+  did while an endpoint created through Notch Pay's webhooks API existed. With
+  that endpoint deleted, two payments on 2026-10-24 were final within about
+  5 s: consistent with it having caused the stall, and still a correlation.
 - The same reference sent again answered `409`, as the first row expects.
 
 ## Redirect rails (Orange Money): persist the token before redirect

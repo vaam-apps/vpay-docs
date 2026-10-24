@@ -228,9 +228,11 @@ but **no charge decline has ever been observed from MTN**.
 ## Refunds via Disbursements
 
 An MTN refund is a Disbursements `transfer` to the payee the merchant names in
-`destination[mtn_momo][msisdn]`, under the rail's code even for a charge that
-was routed here as `mtn_wallet`; `/v1` does not say such a charge went to this
-rail ([the merchant API](/api/#payment-method-types-and-routing)). The call is
+`destination[mtn_momo][msisdn]` or, since v0.13.0, under the type the charge
+records, `destination[mtn_wallet][msisdn]`. The type is what to send for a
+charge routed here as `mtn_wallet`, because `/v1` still does not say such a
+charge went to this rail
+([the merchant API](/api/#payment-method-types-and-routing)). The call is
 written:
 
 ```http

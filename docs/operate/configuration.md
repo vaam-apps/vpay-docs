@@ -238,8 +238,9 @@ no message prints it. **`verify`** is `on` by default and is an
 acknowledgement, not a switch: a configured secret is checked whatever it says.
 `verify: off` is what lets a livemode deployment boot a signing rail with no
 secret, and the server warns at every boot that says it. The boot rules are in
-the table below; the check itself is stub-proven and has never met a webhook
-Notch Pay sent ([Notch Pay](/rails/notchpay#webhook-signatures)).
+the table below. The check itself is proven against stubs, and on 2026-10-24
+it verified four real sandbox webhooks offline; none has reached a running
+vpay ([Notch Pay](/rails/notchpay#webhook-signatures)).
 
 ### Routing weights
 
@@ -328,18 +329,18 @@ deployment has no supported way to supply them yet. See
 
 ## Status in this release
 
-| Part                                                       | Status                   | Evidence                                                                                                                             |
-| ---------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| CLI / env layer                                            | <Status s="built" />     | Flag parsing, env resolution and precedence tested in `vpay-config`                                                                  |
-| YAML load, overlay, `${VAR}` resolution, validation        | <Status s="built" />     | `Config::load` wired into both modes; exit 78 proven by subprocess tests                                                             |
-| Reconcile into `currencies` / `providers`                  | <Status s="built" />     | Advisory-locked, one transaction; proven against real Postgres                                                                       |
-| Livemode guard rules                                       | <Status s="partial" />   | Implemented and unit-tested; no livemode deployment has ever booted                                                                  |
-| Config hash (detect replicas on different files)           | <Status s="not-built" /> | "Nothing records or compares one"                                                                                                    |
-| `providers[].callbacks.register` and its two boot refusals | <Status s="partial" />   | Parsed, defaulted per adapter and refused in unit and integration tests; the pass it drives has met a WireMock Notch Pay only        |
-| Callback signing settings and their six boot refusals      | <Status s="partial" />   | Each refusal tested in `boot.rs` in both modes and mutation-checked; the check they configure has never met a webhook Notch Pay sent |
-| `routing.weights` and its six refusals                     | <Status s="partial" />   | Each refusal tested and mutation-checked; the weight is the score's only component, and the fee is not built                         |
-| Hot reload                                                 | <Status s="not-built" /> | By design: a config change is a redeploy                                                                                             |
-| Checkout-page files in Kubernetes                          | <Status s="not-built" /> | The chart templates no ConfigMap for them                                                                                            |
+| Part                                                       | Status                   | Evidence                                                                                                                                                                            |
+| ---------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI / env layer                                            | <Status s="built" />     | Flag parsing, env resolution and precedence tested in `vpay-config`                                                                                                                 |
+| YAML load, overlay, `${VAR}` resolution, validation        | <Status s="built" />     | `Config::load` wired into both modes; exit 78 proven by subprocess tests                                                                                                            |
+| Reconcile into `currencies` / `providers`                  | <Status s="built" />     | Advisory-locked, one transaction; proven against real Postgres                                                                                                                      |
+| Livemode guard rules                                       | <Status s="partial" />   | Implemented and unit-tested; no livemode deployment has ever booted                                                                                                                 |
+| Config hash (detect replicas on different files)           | <Status s="not-built" /> | "Nothing records or compares one"                                                                                                                                                   |
+| `providers[].callbacks.register` and its two boot refusals | <Status s="partial" />   | Parsed, defaulted per adapter and refused in unit and integration tests; the pass it drives has met a WireMock Notch Pay only                                                       |
+| Callback signing settings and their six boot refusals      | <Status s="partial" />   | Each refusal tested in `boot.rs` in both modes and mutation-checked; the check they configure verified four real sandbox webhooks offline (2026-10-24), none through a running vpay |
+| `routing.weights` and its six refusals                     | <Status s="partial" />   | Each refusal tested and mutation-checked; the weight is the score's only component, and the fee is not built                                                                        |
+| Hot reload                                                 | <Status s="not-built" /> | By design: a config change is a redeploy                                                                                                                                            |
+| Checkout-page files in Kubernetes                          | <Status s="not-built" /> | The chart templates no ConfigMap for them                                                                                                                                           |
 
 The full record, including every test name, is the Status section of
 [docs/flows/configuration.md](vpay:docs/flows/configuration.md#status).
