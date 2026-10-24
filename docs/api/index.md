@@ -16,6 +16,7 @@ sources:
   - docs/adr/0029-card-and-bank-adapters-and-payment-method-routing.md
   - docs/status/verification/2026-10-23-method-type-routing.md
   - docs/sdks/parity.md
+  - docs/status/verification/2026-10-24-rail-on-v1.md
 skills:
   - vpay-merchant-api
   - vpay-payments
@@ -228,8 +229,16 @@ What a merchant should know before relying on it:
   On Notch Pay a number from the other network is refused by the rail, and
   the charge fails as `invalid_payer`, an answer seen in Notch Pay's sandbox
   and proven in vpay against a stub of it.
-- **The decision is not on the API.** The chosen rail, the type and the
-  ranking are recorded in vpay's database, on no `/v1` object.
+- **The outcome is on the intent; the decision is not.** Since v0.14.0 every
+  `payment_intent` carries `payment_method_details`: `null` until it has a
+  charge, then `{ "type": …, "rail": … }`. `rail` is the rail the charge was
+  made on. `type` is the method type the charge records, or `null` where it
+  records none (a rail-code `notchpay` confirm, or a charge from before
+  migration `0053`); it is never inferred from the rail. It is on the `/v1`
+  routes, the payer's `/v1/browser` routes and every `payment_intent.*` event
+  written since; an older event keeps the thirteen keys it was written with.
+  The ranking that chose the rail stays in vpay's database, on no `/v1` object
+  ([verification](vpay:docs/status/verification/2026-10-24-rail-on-v1.md)).
 - **A routed charge is refunded under its method type or its rail's code.**
   Since v0.13.0 `POST /v1/refunds` accepts
   `destination[<the charge's method type>][…]`, such as
@@ -237,9 +246,9 @@ What a merchant should know before relying on it:
   refunding a routed charge no longer means knowing which rail won. The type is
   the one the charge records: set on every routed charge, and on a rail-code
   charge whose rail serves one type. Another type, a type on a charge that
-  records none, or both keys at once is a `400` naming `destination`. **The
-  rail itself is still on no `/v1` object**; showing it is the other half of the
-  maintainer's decision, and it is not in this release
+  records none, or both keys at once is a `400` naming `destination`. Since
+  v0.14.0 the rail itself is on the intent too, as
+  `payment_method_details.rail`, the other half of the maintainer's decision
   ([verification](vpay:docs/status/verification/2026-10-24-refund-by-method-type.md)).
 - **Neither SDK can send a confirm by type or a pin** yet
   ([SDK parity](vpay:docs/sdks/parity.md)). The checkout session's browser
@@ -357,16 +366,16 @@ invented a resource. Both SDKs can call it and get that `404`.
 
 ## Status in this release
 
-| Part                                        | Status                   | Evidence                                                                                                                            |
-| ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                                                       |
-| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded and Notch Pay's sandbox took six; other rail evidence is stub-based |
-| Payment-method types and routing            | <Status s="partial" />   | WireMock and a real Postgres; one provisional score component; no SDK support; the decision is not on `/v1`                         |
-| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                                                     |
-| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                                                    |
-| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                                                   |
-| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                                                        |
-| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                                                               |
+| Part                                        | Status                   | Evidence                                                                                                                                  |
+| ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                                                             |
+| Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded and Notch Pay's sandbox took six; other rail evidence is stub-based       |
+| Payment-method types and routing            | <Status s="partial" />   | WireMock and a real Postgres; one provisional score component; no SDK support; the outcome is on `/v1` since v0.14.0, the decision is not |
+| Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                                                           |
+| Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                                                          |
+| Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                                                         |
+| `GET /v1/balance`                           | <Status s="not-built" /> | honest `404`                                                                                                                              |
+| Rate limiting on `/v1` or `/v1/oauth/token` | <Status s="not-built" /> | left to an ingress nothing in the repository verifies                                                                                     |
 
 The full record is [docs/api/README.md](vpay:docs/api/README.md) and
 [docs/status/backend.md](vpay:docs/status/backend.md).

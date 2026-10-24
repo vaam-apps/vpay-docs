@@ -142,6 +142,12 @@ caller. `ConfirmPaymentIntentParams` still has rail variants only, so this SDK
 cannot confirm by type or pin a rail with
 `payment_method_options[<type>][rail]`: a dated ⛔ in the matrix.
 
+Since v0.14.0 `PaymentIntent::payment_method_details` is an
+`Option<PaymentMethodDetails>`: `None` until the intent has a charge, then
+`PaymentMethodDetails { method_type: Option<String>, rail: String }` (`type` on
+the wire, `None` where the charge records none). It is `#[serde(default)]`, so
+an older vpay that omits the key still decodes.
+
 The client exposes `payment_intents()`, `checkout().sessions()`, `customers()`,
 `invoices()`, `invoice_items()`, `refunds()`, `events()`, `balance()` and
 `account_holders()`. As in Node, there is no `events().retrieve()`, and
@@ -267,18 +273,19 @@ no money moves. [Demo runbook](/operate/runbooks#demo).
 
 ## Status in this release
 
-| Part                                        | Status                   | Evidence                                                                                          |
-| ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
-| Handshake, token cache, single re-auth      | <Status s="built" />     | Parity ✅ rows; real-verifier conformance test                                                    |
-| `/v1` resource methods                      | <Status s="built" />     | Every method's wire shape pinned; byte-identical to Node                                          |
-| Empty or all-dots path `id` refused         | <Status s="built" />     | Since v0.9.1, on all twenty-one id-taking methods, before any request; four ✅ rows in the matrix |
-| `MtnWallet` and `OrangeWallet` on a create  | <Status s="built" />     | Since v0.12.0; a ✅ row, the same body byte for byte as Node's                                    |
-| Confirm by payment-method type, or pinned   | <Status s="not-built" /> | A dated ⛔ row: `ConfirmPaymentIntentParams` has rail variants only                               |
-| Refunds and invoices against a running vpay | <Status s="partial" />   | Live suites against WireMock rails; no refund ever settles                                        |
-| `token_type` validation, timeout test       | <Status s="not-built" /> | Dated ⛔ rows                                                                                     |
-| An `async-stripe` authenticator             | <Status s="not-built" /> | Dated ⛔: `async-stripe` has no per-request hook                                                  |
-| TLS verification                            | <Status s="unproven" />  | No test serves TLS                                                                                |
-| Published crate                             | <Status s="not-built" /> | `publish = false`                                                                                 |
+| Part                                          | Status                   | Evidence                                                                                          |
+| --------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
+| Handshake, token cache, single re-auth        | <Status s="built" />     | Parity ✅ rows; real-verifier conformance test                                                    |
+| `/v1` resource methods                        | <Status s="built" />     | Every method's wire shape pinned; byte-identical to Node                                          |
+| Empty or all-dots path `id` refused           | <Status s="built" />     | Since v0.9.1, on all twenty-one id-taking methods, before any request; four ✅ rows in the matrix |
+| `MtnWallet` and `OrangeWallet` on a create    | <Status s="built" />     | Since v0.12.0; a ✅ row, the same body byte for byte as Node's                                    |
+| `payment_method_details` on a `PaymentIntent` | <Status s="built" />     | Since v0.14.0; a ✅ row: both shapes, and a server that omits the key                             |
+| Confirm by payment-method type, or pinned     | <Status s="not-built" /> | A dated ⛔ row: `ConfirmPaymentIntentParams` has rail variants only                               |
+| Refunds and invoices against a running vpay   | <Status s="partial" />   | Live suites against WireMock rails; no refund ever settles                                        |
+| `token_type` validation, timeout test         | <Status s="not-built" /> | Dated ⛔ rows                                                                                     |
+| An `async-stripe` authenticator               | <Status s="not-built" /> | Dated ⛔: `async-stripe` has no per-request hook                                                  |
+| TLS verification                              | <Status s="unproven" />  | No test serves TLS                                                                                |
+| Published crate                               | <Status s="not-built" /> | `publish = false`                                                                                 |
 
 The full record is the Rust column of
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md) and the crate's own

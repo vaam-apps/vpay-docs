@@ -12,6 +12,7 @@ sources:
   - docs/runbooks/rotate-rail-credentials.md
   - docs/flows/reconciler.md
   - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/status/verification/2026-10-24-rail-on-v1.md
 skills:
   - vpay-mtn-momo
   - vpay-provider-adapters
@@ -230,8 +231,9 @@ but **no charge decline has ever been observed from MTN**.
 An MTN refund is a Disbursements `transfer` to the payee the merchant names in
 `destination[mtn_momo][msisdn]` or, since v0.13.0, under the type the charge
 records, `destination[mtn_wallet][msisdn]`. The type is what to send for a
-charge routed here as `mtn_wallet`, because `/v1` still does not say such a
-charge went to this rail
+charge routed here as `mtn_wallet` without reading where it went. Since v0.14.0
+the intent says where: its `payment_method_details.rail` is `mtn_momo`, so the
+rail code works too
 ([the merchant API](/api/#payment-method-types-and-routing)). The call is
 written:
 

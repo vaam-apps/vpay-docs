@@ -120,6 +120,11 @@ the embedded handle — `{ mount, unmount, destroy }` is assignable to Stripe's
 `StripeEmbeddedCheckout` in both directions, pinned by a compile-time test — and
 the `PaymentIntentResult` narrowing idiom.
 
+Since v0.14.0 a `PaymentIntent` also carries `payment_method_details`, a key
+Stripe.js's own type does not have: `null` until the intent has a charge, then
+`{ type, rail }`. The package types it as an optional `PaymentMethodDetails`,
+because an older vpay omits it.
+
 **Redirect rails** follow Stripe.js: on `next_action.redirect_to_url` the page
 navigates and the promise never settles, unless you pass
 `redirect: 'if_required'`. vpay appends **nothing** to your `return_url` — none
@@ -188,13 +193,13 @@ just demo_port=18080 stripe-compat
 That recipe brings the stack up and runs the suite; `just demo-down` tears it
 down. What it covers:
 
-| File                         | Proves                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `lifecycle.compat.test.ts`   | create, retrieve, cursor paging with `autoPagingToArray`, cancel, confirm to `processing`, a bounded poll to `succeeded`             |
-| `webhooks.compat.test.ts`    | a delivery the receiver actually recorded verifies with `stripe.webhooks.constructEvent`; tampered body and wrong secret are refused |
-| `errors.compat.test.ts`      | status → Stripe error class, `err.param`, `err.requestId`, the 409 retry advisory, money-moving parameters refused not ignored       |
-| `idempotency.compat.test.ts` | stripe-node's auto-generated key, replay, reused key with a changed body                                                             |
-| `headers.compat.test.ts`     | the `request-id` / `x-request-id` mirror; `Stripe-Version` and `Stripe-Account` accepted and ignored                                 |
+| File                         | Proves                                                                                                                                                                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lifecycle.compat.test.ts`   | create, retrieve, cursor paging with `autoPagingToArray`, cancel, confirm to `processing`, a bounded poll to `succeeded`; since v0.14.0, `payment_method_details` read through `unknown`, `null` after a cancel and `{ type, rail }` after a confirm |
+| `webhooks.compat.test.ts`    | a delivery the receiver actually recorded verifies with `stripe.webhooks.constructEvent`; tampered body and wrong secret are refused                                                                                                                 |
+| `errors.compat.test.ts`      | status → Stripe error class, `err.param`, `err.requestId`, the 409 retry advisory, money-moving parameters refused not ignored                                                                                                                       |
+| `idempotency.compat.test.ts` | stripe-node's auto-generated key, replay, reused key with a changed body                                                                                                                                                                             |
+| `headers.compat.test.ts`     | the `request-id` / `x-request-id` mirror; `Stripe-Version` and `Stripe-Account` accepted and ignored                                                                                                                                                 |
 
 **It cannot skip.** A `globalSetup` fails the run when no vpay answers
 `/healthz` or the merchant handshake does not complete — a suite that skipped

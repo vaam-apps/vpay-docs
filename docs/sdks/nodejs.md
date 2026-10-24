@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.13.0`. Being published
+2026-09-23. The manifest in <Release /> is version `0.14.0`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
@@ -141,6 +141,12 @@ migration `0053`; an older one refuses it as an unknown rail.
 `ConfirmPaymentIntentParams` still names rail codes only, so this SDK cannot
 confirm by type or pin a rail with `payment_method_options[<type>][rail]`: a
 dated ⛔ in the matrix.
+
+Since v0.14.0 a `PaymentIntent` has `payment_method_details?:
+PaymentMethodDetails | null`, both exported: `null` until the intent has a
+charge, then `{ type, rail }`, where `type` is `string | null` and is `null`
+when the charge records none. It is optional because an older vpay omits the
+key.
 
 Two additions from vpay 0.6.0 are worth knowing:
 
@@ -338,6 +344,7 @@ right bytes" and "the SDK works against vpay".
 | An empty or all-dots path `id` refused before any request (v0.9.1)   | <Status s="built" />     | Four ✅ rows in the matrix's "Request validation"                               |
 | Every local refusal is a `VpayInvalidParamsError` (v0.10.0)          | <Status s="built" />     | A ✅ row in "Request validation"; no longer a `TypeError`, so a breaking change |
 | `mtn_wallet` and `orange_wallet` on a create (v0.12.0)               | <Status s="built" />     | A ✅ row; the same body byte for byte as the Rust SDK's                         |
+| `payment_method_details` on a `PaymentIntent` (v0.14.0)              | <Status s="built" />     | A ✅ row: decodes both shapes and a server that omits the key                   |
 | Confirm by payment-method type, or pinned to a rail                  | <Status s="not-built" /> | A dated ⛔ row: `ConfirmPaymentIntentParams` names rail codes only              |
 | Retries, `request-id`, `stripe-should-retry`, `events.retrieve`      | <Status s="not-built" /> | Dated ⛔ rows in the parity matrix                                              |
 

@@ -83,6 +83,8 @@ rails that serve it and charges the first. Orange's network is served by two
 rails with different journeys, `orange_money` (redirect) and Notch Pay (push),
 so which column applies is decided by the rail the ranking picks, and a
 merchant's server confirming one must pin a rail to know which fields to send.
+Once a charge exists, the intent names the rail the ranking picked, as
+`payment_method_details`, since v0.14.0.
 The ranking's formula is provisional: one weight the operator configures per rail
 ([Merchant API](vpay:docs/api/README.md)).
 

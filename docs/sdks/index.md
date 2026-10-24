@@ -134,6 +134,7 @@ of it at <Release />:
 | `payment_intents.confirm` on `notchpay`, the second push rail                                                                            | ✅                                                                        | ✅                                                                    |
 | `payment_intents.create` with a payment-method type (`mtn_wallet`, `orange_wallet`) beside a rail code                                   | ✅                                                                        | ✅                                                                    |
 | `payment_intents.confirm` by payment-method type, or pinned to a rail with `payment_method_options[<type>][rail]`                        | ⛔ `ConfirmPaymentIntentParams` names rail codes only                     | ⛔ the same                                                           |
+| A `payment_intent`'s `payment_method_details`, and a server that omits it (v0.14.0)                                                      | ✅                                                                        | ✅                                                                    |
 | The `customer` list filter and `invoices.pay` out of band                                                                                | ✅                                                                        | ✅                                                                    |
 | An empty or all-dots path `id` refused before any request (v0.9.1)                                                                       | ✅                                                                        | ✅                                                                    |
 | Every local refusal is the SDK's own error type, caught with the rest                                                                    | ✅ `Error::InvalidParams`                                                 | ✅ `VpayInvalidParamsError` since v0.10.0 (a bare `TypeError` before) |
@@ -174,10 +175,12 @@ A refund's `destination` is keyed with the same `PaymentMethodType`. Since
 v0.13.0 the server accepts either the code of the rail the charge was made on
 or the payment-method type the charge records, so `mtn_wallet` refunds a charge
 routed by `mtn_wallet`; another type, or a type on an older server, is a `400`
-naming `destination`. That is how to refund a routed charge, because no `/v1`
-object says which rail it went to
+naming `destination`. That is how to refund a routed charge without reading
+which rail it went to. Since v0.14.0 the intent names that rail too, as
+`payment_method_details.rail`, so its code works as well
 ([the merchant API](/api/#payment-method-types-and-routing)). Both SDKs' doc
-comments say so since v0.13.0; no signature changed.
+comments describe the type since v0.13.0, and no signature changed; their aside
+that no `/v1` object names the rail was not updated in v0.14.0 and is stale.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:

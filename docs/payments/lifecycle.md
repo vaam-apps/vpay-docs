@@ -10,6 +10,7 @@ sources:
   - backends/crates/vpay-db/src/payment_intents.rs
   - docs/status/verification/2026-10-22-notchpay-b3b.md
   - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/status/verification/2026-10-24-rail-on-v1.md
   - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
   - docs/rfc/0008-payment-method-routing.md
 skills:
@@ -132,7 +133,13 @@ a **payment-method type** (`mtn_wallet` or `orange_wallet`). Then vpay
 **routes** it: it ranks every enabled rail that serves the type and settles the
 currency, and charges the first, unless
 `payment_method_options[<type>][rail]` pins one. The transaction that opens the
-charge also commits a `routing_decisions` row explaining the choice.
+charge also commits a `routing_decisions` row explaining the choice, which is
+on no `/v1` object. Since v0.14.0 that transaction also copies the charge's
+type and rail onto the intent, and every rendering of the intent shows them as
+`payment_method_details`: `null` before the charge, `{ type, rail }` after it,
+with `type` `null` where the charge records none (a rail-code `notchpay`
+confirm, or a charge from before v0.12.0). A declined charge keeps them: it is
+still the intent's one charge.
 
 The lifecycle does not change. The states are the same, the intent still holds
 one charge, and a decline does not move it to another rail. The ranking's
@@ -273,6 +280,7 @@ rail: MTN can produce all eleven, Orange only three and Notch Pay six. See
 | Settlement by the worker                                          | <Status s="partial" />   | `worker_e2e.rs` drives a real confirm through the real loop — against a WireMock rail; the worker has also settled sandbox payments (MTN 2026-09-15, Notch Pay 2026-10-21 and -22)               |
 | Orange redirect flow on a real rail                               | <Status s="unproven" />  | Orange has never been called                                                                                                                                                                     |
 | `prompt_expired_at` and the `payment_intent.processing` milestone | <Status s="not-built" /> | Named as never having happened in the source                                                                                                                                                     |
+| The intent's `payment_method_details` (v0.14.0)                   | <Status s="partial" />   | Unit tests; integration cases on every confirm path against WireMock rails and a real Postgres, run only in CI; no rail called                                                                   |
 | Partial `amount_received`                                         | <Status s="not-built" /> | No rail settles part of an amount. Notch Pay's `incomplete` (paid less than asked) stays `Pending`, never a success                                                                              |
 
 The full record is the **Status** section of

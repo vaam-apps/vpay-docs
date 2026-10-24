@@ -169,6 +169,13 @@ against the compose stack.
 | —                                                                  | `stripe.openCheckoutPopup({ fetchCheckoutUrl, onComplete, onCancel })`             |
 | —                                                                  | `notifyCheckoutOpener({ session, status })`                                        |
 
+**The intent says which rail took the payment, since v0.14.0.** A
+`PaymentIntent` from `retrievePaymentIntent`, `confirmPayment` or
+`waitForPaymentIntent` carries `payment_method_details` (exported as the
+`PaymentMethodDetails` type): `null` until the intent has a charge, then
+`{ type, rail }`, with `type` `null` where the charge recorded none. It is
+optional in the package's types, because a vpay before v0.14.0 omits it.
+
 **Absent by construction, not stubbed:** Elements, cards, 3DS, Payment Element,
 Link, Payment Request / Apple Pay / Google Pay, `confirmCardPayment`,
 `createPaymentMethod`, ConfirmationTokens and SetupIntents. A missing method is

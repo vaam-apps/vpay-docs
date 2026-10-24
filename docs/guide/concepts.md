@@ -20,6 +20,7 @@ sources:
   - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
   - docs/rfc/0008-payment-method-routing.md
   - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/status/verification/2026-10-24-rail-on-v1.md
   - docs/rfc/0014-verifying-rail-callbacks.md
   - docs/status/verification/2026-10-23-webhook-signatures.md
 skills:
@@ -140,9 +141,11 @@ currency, ranks them, charges the first, and records why in the charge's
 transaction. The ranking today has one provisional component, a weight the
 operator configures; the fee is the next component, and is not built. No
 measured quantity moves traffic on its own. A decline never moves the intent
-to another rail. The decision is not on any `/v1` object yet, and neither SDK
-can send a confirm by type. Since v0.13.0 a routed charge can be refunded under
-its type, so a merchant need not know which rail won. Full pages: [the merchant API](/api/) and
+to another rail. Neither SDK can send a confirm by type. Since v0.13.0 a routed
+charge can be refunded under its type, so a merchant need not know which rail
+won, and since v0.14.0 the intent says anyway: `payment_method_details` names
+its charge's type and rail. The ranking behind the choice is on no `/v1`
+object. Full pages: [the merchant API](/api/) and
 [the provider port](/rails/provider-port).
 
 ## Callbacks are hints
