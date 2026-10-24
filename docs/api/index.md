@@ -13,6 +13,9 @@ sources:
   - docs/rfc/0003-refunds-destinations-and-the-first-ledger-postings.md
   - docs/adr/0024-customer-filters-and-manual-payments.md
   - docs/adr/0025-session-customer-onto-intent.md
+  - docs/adr/0029-card-and-bank-adapters-and-payment-method-routing.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/sdks/parity.md
 skills:
   - vpay-merchant-api
   - vpay-payments
@@ -29,8 +32,8 @@ OAuth2 `client_credentials` + `private_key_jwt` (see
 
 Every route below is real — it answers with real rows from a real Postgres — but
 the rails behind the money-moving ones have only ever been WireMock stubs, apart
-from over seven successful MTN **sandbox** payments on 2026-09-15 and three
-test-mode payments through Notch Pay's **sandbox** on 2026-10-21. Read
+from over seven successful MTN **sandbox** payments on 2026-09-15 and six
+test-mode payments through Notch Pay's **sandbox** on 2026-10-21 and -22. Read
 [Status](/guide/status) before you build on anything here.
 
 Agents working on this surface should load
@@ -160,7 +163,8 @@ Request bodies are `application/x-www-form-urlencoded`, bracket-nested the way
 Stripe's SDKs send them (`metadata[order_id]=1234`,
 `payment_method_types[0]=mtn_momo`; the unindexed `[]` spelling is accepted
 too). A JSON body is refused with a `400` telling you to send a form, and a body
-over **64 KiB** is refused. Amounts are integer minor units — see
+over **64 KiB** is refused. Since v0.12.0 a confirm's `payment_method_options` must be a
+map: a plain string there is refused, where it used to be accepted. Amounts are integer minor units — see
 [Money](/payments/money).
 
 Every non-2xx response the API renders is Stripe's envelope:
@@ -182,6 +186,57 @@ answer. `message` never carries hosts, table names or credentials. Two responses
 are produced above that renderer and carry an empty or plain-text body instead:
 a `405` (right path, wrong method) and a `413` (body too large). The full
 category table is on [Errors](/payments/errors).
+
+## Payment-method types and routing
+
+Since v0.12.0, `payment_method_types[]` takes two kinds of value, and one
+intent may mix them
+([ADR-0029](vpay:docs/adr/0029-card-and-bank-adapters-and-payment-method-routing.md)
+D6):
+
+- **A rail code** — `mtn_momo`, `orange_money` or `notchpay` — means that rail,
+  pinned, exactly as before.
+- **A payment-method type** — `mtn_wallet` or `orange_wallet` — means the
+  payer's wallet network and leaves the rail to vpay. A create accepts one only
+  when an enabled rail serves it in the intent's currency, else a `400` naming
+  `payment_method_types`. `card` and `bank_transfer` are reserved and refused.
+
+A confirm whose `payment_method_data[type]` is a type is **routed**: vpay ranks
+every enabled rail that serves the type and settles the currency, and charges
+the first. The payer's fields sit under the type, as in
+`payment_method_data[mtn_wallet][msisdn]`.
+`payment_method_options[<type>][rail]` pins one rail; a pin that cannot take
+the payment is a `400` naming that parameter, never a fallback to another rail.
+A decline is not retried on the next rail: one charge per intent still holds.
+
+What a merchant should know before relying on it:
+
+- **The ranking is provisional.** Its one component is a weight per rail that
+  the operator configures (`routing.weights`, equal by default), and ties go to
+  the lower rail code. With equal weights that sends `mtn_wallet` to
+  `mtn_momo` and `orange_wallet` to `notchpay`: a tie-break, not a preference.
+  The maintainer decided on 2026-10-23 that the fee is the
+  next component, which is not built, and that no measured quantity, such as a
+  completion rate, moves traffic on its own
+  ([RFC-0008](vpay:docs/rfc/0008-payment-method-routing.md)).
+- **`orange_wallet` needs different fields depending on the rail.**
+  `orange_money` is a redirect rail and needs `return_url`; `notchpay` is a
+  push rail and needs `msisdn`. A server-side confirm has to pin to know which
+  to send. A confirm that sends `msisdn` works only while `notchpay` ranks
+  first.
+- **vpay does not check a payer's number against the network they chose.**
+  On Notch Pay a number from the other network is refused by the rail, and
+  the charge fails as `invalid_payer`, an answer seen in Notch Pay's sandbox
+  and proven in vpay against a stub of it.
+- **The decision is not on the API.** The chosen rail, the type and the
+  ranking are recorded in vpay's database, on no `/v1` object.
+- **Neither SDK can send a confirm by type or a pin** yet
+  ([SDK parity](vpay:docs/sdks/parity.md)). The checkout session's browser
+  answer offers a type as one entry, flowing as its first-ranked rail; the
+  checkout page's rendering of it has no frontend test.
+
+Routing is proven against WireMock and a real Postgres; no confirm by type has
+reached a real rail.
 
 ## `Idempotency-Key` is required on every `POST`
 
@@ -237,7 +292,7 @@ saying the charge is being resolved, poll the `GET`. Only a `409` saying the
 charge is terminal means "create a new intent".
 :::
 
-Since <Release /> a `502` can also carry the code
+Since v0.11.0 a `502` can also carry the code
 `charge_needs_reconciliation`: the rail answered, and only a person can settle
 what it said. Handle it as the `502` above. The charge stays live, the worker
 escalates it to `unresolved` for an operator, and the intent stays where it is
@@ -272,8 +327,10 @@ transaction, and instructed the rail. It does **not** mean money moved:
 - `notchpay::refund` is a declared `NotImplemented` token too, so a refund on a
   Notch Pay charge also answers `501`.
 
-`destination[<payment_method_type>][msisdn]` is required on MTN and Orange (a
-refund there is an outbound transfer and needs a payee). Notch Pay refunds to
+`destination[<rail code>][msisdn]` is required on MTN and Orange (a refund
+there is an outbound transfer and needs a payee). The key is the charge's
+**rail** code, such as `destination[mtn_momo][msisdn]`, never a payment-method
+type such as `mtn_wallet`. Notch Pay refunds to
 the instrument that paid, so a `destination` sent for it is a `400` naming
 `destination`, before the token is reached. And
 `POST /v1/refunds/{id}/cancel` in practice refuses every refund the create route
@@ -292,6 +349,7 @@ invented a resource. Both SDKs can call it and get that `404`.
 | ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                                                       |
 | Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded and Notch Pay's sandbox took six; other rail evidence is stub-based |
+| Payment-method types and routing            | <Status s="partial" />   | WireMock and a real Postgres; one provisional score component; no SDK support; the decision is not on `/v1`                         |
 | Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                                                     |
 | Idempotency                                 | <Status s="built" />     | every row of the table above is a named integration test against a real Postgres                                                    |
 | Refunds                                     | <Status s="unproven" />  | routes and rows are real; no rail has ever refunded and nothing settles `pending`                                                   |

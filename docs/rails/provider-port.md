@@ -3,7 +3,7 @@ title: The provider port
 description:
   How vpay keeps every payment rail behind one trait, why the core branches on
   capability values and never on a rail's name, and why a callback can never
-  move money.
+  move money, even one whose signature checks out.
 status: partial
 sources:
   - docs/flows/provider-port.md
@@ -16,6 +16,12 @@ sources:
   - docs/rfc/0013-vpay-registers-its-own-callbacks.md
   - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
   - docs/adr/0011-error-modelling.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
+  - docs/flows/reconciler.md
+  - docs/status/verification/2026-10-23-webhook-signatures.md
+  - docs/status/verification/2026-10-23-notchpay-defaults-and-wrong-network.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
 skills:
   - vpay-provider-adapters
   - vpay-conventions
@@ -61,10 +67,12 @@ classDiagram
         +submit(charge, config) Submitted
         +query_status(charge, config) ChargeStatus
         +parse_callback(body) CallbackRef
+        +verify_callback(request, charge, config) CallbackVerdict
         +parse_destination(raw) RefundTarget
         +refund(charge, amount, destination, config) Refunded
         +account_holder_name(msisdn, config) AccountHolder
         +ensure_callback_endpoint(check, config) EndpointReport
+        +default_callback_registration() CallbackRegistrationDefault
     }
     class Capabilities {
         flow Push or Redirect
@@ -76,6 +84,8 @@ classDiagram
         refund_destination Origin or Required
         callback_url_mode PerRequest or Registered
         submit_steps One or PrepareThenSubmit
+        method_types
+        callback_check None, BodyToken or Signature
     }
     class Measured {
         wraps every shipping adapter
@@ -103,25 +113,29 @@ classDiagram
 
 ### The operations
 
-| Method                     | What it promises                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepare`                  | Optional, since v0.11.0. Called only on a rail declaring `submit_steps: PrepareThenSubmit`, before `submit`, and told whether any `submit` was ever made for the charge. It creates the payment on the rail **without prompting anyone** and returns the reference the rail will be addressed by, which the core commits on the charge before it writes the `submit` row ([ADR-0032](vpay:docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md), _Proposed_). Defaults to `ProviderError::Unsupported`; only `notchpay` overrides it. |
-| `submit`                   | Ask the rail to take a payment. **Idempotent on `reference_id`**: a duplicate submission must answer `Submitted`, never an error, which is what makes a same-reference retry after a crash safe. A redirect rail returns its `redirect_url` and its key material (`ref_extra`) in the same value, so a caller cannot hold one without the other.                                                                                                                                                                                                         |
-| `query_status`             | The authoritative read, and the only thing that moves money. Takes the whole charge, because some rails need the amount and their own token. Must keep working indefinitely.                                                                                                                                                                                                                                                                                                                                                                             |
-| `parse_callback`           | Turns a notification body into **identifiers only — never a status**. Deliberately synchronous, so it cannot make a network call and cannot smuggle a status out of an unauthenticated request.                                                                                                                                                                                                                                                                                                                                                          |
-| `parse_destination`        | Optional. Reads the adapter's own `destination[<rail_code>][…]` sub-map from a refund request into a `RefundTarget`. The core strips the rail code and interprets nothing inside.                                                                                                                                                                                                                                                                                                                                                                        |
-| `refund`                   | Optional, gated by `supports_refunds`. Answers `Refunded` — which carries `fee: Option<Money>` rather than a redirect URL. The default body is `ProviderError::Unsupported`.                                                                                                                                                                                                                                                                                                                                                                             |
-| `account_holder_name`      | Optional, gated by `supports_account_holder_lookup`. Defaults to `ProviderError::Unsupported`. See [account-holder lookup](/rails/account-holder-lookup).                                                                                                                                                                                                                                                                                                                                                                                                |
-| `ensure_callback_endpoint` | Optional, since v0.11.0. Called only on a rail declaring `callback_url_mode: Registered`, by the worker's `ensure:callbacks` pass and by `vpay-server callbacks ensure`, under a database lock. Lists the account's webhook endpoints and creates vpay's at most once when asked to write. **It never modifies or deletes an endpoint.** Defaults to `ProviderError::Unsupported`; only `notchpay` overrides it ([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)).                                                                    |
-| `payer_fields`             | Optional. What a payer must fill in before this rail can be confirmed. The one declaration drives both the rail spec the checkout page renders and the confirm-time validation of `payment_method_data[<code>][…]`, so the two cannot drift. Defaults to none, which is right for a redirect rail; `mtn_momo` declares its MSISDN.                                                                                                                                                                                                                       |
-| `code`                     | The stable rail code, equal to its `payment_method_types` value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `capabilities`             | A static declaration the core reads instead of special-casing a rail.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `accepted_exposure`        | Optional, `None` by default. What the key a rail's status read accepts lets someone other than vpay do, on a rail admitted under [ADR-0031](vpay:docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md). Boot logs it at `WARN`, naming the credential and never its value. Only `notchpay` declares one.                                                                                                                                                                                                                                    |
+| Method                          | What it promises                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare`                       | Optional, since v0.11.0. Called only on a rail declaring `submit_steps: PrepareThenSubmit`, before `submit`, and told whether any `submit` was ever made for the charge. It creates the payment on the rail **without prompting anyone** and returns the reference the rail will be addressed by, which the core commits on the charge before it writes the `submit` row ([ADR-0032](vpay:docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md), accepted). Defaults to `ProviderError::Unsupported`; only `notchpay` overrides it.         |
+| `submit`                        | Ask the rail to take a payment. **Idempotent on `reference_id`**: a duplicate submission must answer `Submitted`, never an error, which is what makes a same-reference retry after a crash safe. A redirect rail returns its `redirect_url` and its key material (`ref_extra`) in the same value, so a caller cannot hold one without the other.                                                                                                                                                                                                               |
+| `query_status`                  | The authoritative read, and the only thing that moves money. Takes the whole charge, because some rails need the amount and their own token. Must keep working indefinitely.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `parse_callback`                | Turns a notification body into **identifiers only — never a status**. Deliberately synchronous, so it cannot make a network call and cannot smuggle a status out of an unauthenticated request.                                                                                                                                                                                                                                                                                                                                                                |
+| `verify_callback`               | Optional, since v0.12.0. Handed the request's headers and **raw** body, the charge the identifiers matched and the rail's config, it answers whether the callback is the rail's: `Verified`, `VerifiedPrevious` (the previous signing secret matched), `Invalid`, `NotChecked`, `NoSecret` or `Unavailable` — a verdict, never an error. It decides **only** whether the charge's poll is pulled forward; even `Verified` moves no money. Defaults to `NotChecked`; only `notchpay` overrides it ([RFC-0014](vpay:docs/rfc/0014-verifying-rail-callbacks.md)). |
+| `parse_destination`             | Optional. Reads the adapter's own `destination[<rail_code>][…]` sub-map from a refund request into a `RefundTarget`. The core strips the rail code and interprets nothing inside.                                                                                                                                                                                                                                                                                                                                                                              |
+| `refund`                        | Optional, gated by `supports_refunds`. Answers `Refunded` — which carries `fee: Option<Money>` rather than a redirect URL. The default body is `ProviderError::Unsupported`.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `account_holder_name`           | Optional, gated by `supports_account_holder_lookup`. Defaults to `ProviderError::Unsupported`. See [account-holder lookup](/rails/account-holder-lookup).                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `ensure_callback_endpoint`      | Optional, since v0.11.0. Called only on a rail declaring `callback_url_mode: Registered` whose registration is switched on, by the worker's `ensure_callbacks` pass and by `vpay-server callbacks ensure`, under a database lock. Lists the account's webhook endpoints and creates vpay's at most once when asked to write. **It never modifies or deletes an endpoint.** Defaults to `ProviderError::Unsupported`; only `notchpay` overrides it ([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)).                                        |
+| `default_callback_registration` | Optional, since v0.12.0. What the registration pass does on this rail when the deployment leaves `providers[].callbacks.register` unset: `Ensure` (the default) or `Off`. An explicit setting always wins. `notchpay` answers `Off`, so vpay asks a Notch Pay account nothing unless the deployment says `register: ensure` or `check` ([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)).                                                                                                                                                   |
+| `payer_fields`                  | Optional. What a payer must fill in before this rail can be confirmed. The one declaration drives both the rail spec the checkout page renders and the confirm-time validation of `payment_method_data[<code>][…]`, so the two cannot drift. Defaults to none, which is right for a redirect rail; `mtn_momo` declares its MSISDN.                                                                                                                                                                                                                             |
+| `code`                          | The stable rail code, equal to its `payment_method_types` value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `capabilities`                  | A static declaration the core reads instead of special-casing a rail.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `accepted_exposure`             | Optional, `None` by default. What the key a rail's status read accepts lets someone other than vpay do, on a rail admitted under [ADR-0031](vpay:docs/adr/0031-a-status-read-authenticated-by-a-server-side-key.md). Boot logs it at `WARN`, naming the credential and never its value. Only `notchpay` declares one.                                                                                                                                                                                                                                          |
 
 The six network methods (`prepare`, `submit`, `query_status`, `refund`,
 `account_holder_name` and `ensure_callback_endpoint`) are `async` via
 `#[async_trait]` (a native `async fn`
-would not be dyn-safe). `ProviderConfig` carries `base_url`, `callback_url`,
+would not be dyn-safe), and so is `verify_callback`, which reaches no rail
+today: it is `async` for a future check that must fetch something, such as
+PayPal's certificate. That makes fourteen methods in all. `ProviderConfig` carries `base_url`, `callback_url`,
 `currency`, `settings`, `credentials` and two deadlines, `connect_timeout` and
 `request_timeout` — on the config rather than the HTTP client, because one
 `reqwest::Client` is shared by every rail.
@@ -150,19 +164,21 @@ they put in `/v1` paths, since v0.9.1 (see [Node.js](/sdks/nodejs#errors) and
 
 The core asks an adapter what it can do and acts on the answer. The two
 capabilities [ADR-0002](vpay:docs/adr/0002-provider-port.md) names are `flow`
-and `supports_refunds`; the port now declares nine.
+and `supports_refunds`; the port now declares eleven.
 
-| Capability                       | `mtn_momo`   | `orange_money` | `notchpay`          | What the core does with it                                                                                                                            |
-| -------------------------------- | ------------ | -------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `flow`                           | `Push`       | `Redirect`     | `Push`              | whether a confirm needs a payer number or a return URL, and whether `submit` may answer a `redirect_url`                                              |
-| `supports_refunds`               | `true`       | `true`         | `true`              | refuses a refund on a rail with no refund API, with no rail-specific branch                                                                           |
-| `supports_partial_refunds`       | `true`       | `false`        | `true`              | refuses a part-refund on a rail that declares `false`                                                                                                 |
-| `delivers_callbacks`             | `true`       | `true`         | `true`              | whether to expect a notification at all — which is a hint either way                                                                                  |
-| `requires_ip_allowlist`          | `true`       | `false`        | `false`             | an operational fact for a deployment, not a code path                                                                                                 |
-| `supports_account_holder_lookup` | `true`       | `false`        | `false`             | refuses `GET /v1/account_holders` with a `400` on a rail with no such API                                                                             |
-| `refund_destination`             | `Required`   | `Required`     | `Origin`            | whether a refund needs an explicit payee; read by the refund route                                                                                    |
-| `callback_url_mode`              | `PerRequest` | `PerRequest`   | `Registered`        | whether the rail is told its callback URL on every submit, or holds it registered with the account, which the worker then keeps there (since v0.11.0) |
-| `submit_steps`                   | `One`        | `One`          | `PrepareThenSubmit` | whether a charge is one call that prompts, or `prepare` then `submit` with the rail's reference committed between them (since v0.11.0)                |
+| Capability                       | `mtn_momo`   | `orange_money`  | `notchpay`          | What the core does with it                                                                                                                                                                                                                                                                                       |
+| -------------------------------- | ------------ | --------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flow`                           | `Push`       | `Redirect`      | `Push`              | whether a confirm needs a payer number or a return URL, and whether `submit` may answer a `redirect_url`                                                                                                                                                                                                         |
+| `supports_refunds`               | `true`       | `true`          | `true`              | refuses a refund on a rail with no refund API, with no rail-specific branch                                                                                                                                                                                                                                      |
+| `supports_partial_refunds`       | `true`       | `false`         | `true`              | refuses a part-refund on a rail that declares `false`                                                                                                                                                                                                                                                            |
+| `delivers_callbacks`             | `true`       | `true`          | `true`              | whether to expect a notification at all — which is a hint either way                                                                                                                                                                                                                                             |
+| `requires_ip_allowlist`          | `true`       | `false`         | `false`             | an operational fact for a deployment, not a code path                                                                                                                                                                                                                                                            |
+| `supports_account_holder_lookup` | `true`       | `false`         | `false`             | refuses `GET /v1/account_holders` with a `400` on a rail with no such API                                                                                                                                                                                                                                        |
+| `refund_destination`             | `Required`   | `Required`      | `Origin`            | whether a refund needs an explicit payee; read by the refund route                                                                                                                                                                                                                                               |
+| `callback_url_mode`              | `PerRequest` | `PerRequest`    | `Registered`        | whether the rail is told its callback URL on every submit, or holds it registered with the account, where the worker keeps it only when the rail's registration is on (since v0.11.0; `off` by default on `notchpay` since v0.12.0)                                                                              |
+| `submit_steps`                   | `One`        | `One`           | `PrepareThenSubmit` | whether a charge is one call that prompts, or `prepare` then `submit` with the rail's reference committed between them (since v0.11.0)                                                                                                                                                                           |
+| `method_types`                   | `mtn_wallet` | `orange_wallet` | both                | which payment-method types the rail serves; the router's eligibility filter reads this and nothing else. Boot refuses an enabled rail that serves none (since v0.12.0)                                                                                                                                           |
+| `callback_check`                 | `None`       | `None`          | `Signature`         | what vpay's adapter checks on a callback: `None`, `Signature`, or `BodyToken` (a per-payment token in the body, which no adapter declares yet). Boot reads it to decide whether a missing signing secret refuses a livemode deployment, and refuses a signing setting on a rail that checks none (since v0.12.0) |
 
 `notchpay` is the first shipping rail that declares `Origin`, so it is the first
 on which the core **refuses** a refund `destination` rather than demanding one.
@@ -170,13 +186,24 @@ On an `Origin` rail the core hands the adapter the charge's `provider_txn_id`,
 so the refund can name the payment it unwinds. Its `refund` is still a declared
 token, so that arm moves no money yet.
 
-`notchpay` is also the first rail to declare `Registered` and
-`PrepareThenSubmit`. A `providers[].callbacks` block on a `PerRequest` rail
+`notchpay` is also the first rail to declare `Registered`,
+`PrepareThenSubmit` and `Signature`, and the only one serving two method
+types. A `providers[].callbacks` block on a `PerRequest` rail
 refuses to boot, and so does `Registered` on a rail that does not declare
 `delivers_callbacks`. `submit_steps` exists because Notch Pay names a payment
 by **its own** reference, issued only in the answer to its first call; the
 core puts a commit between that call and the prompt
 ([crash safety](/payments/crash-safety#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)).
+
+Since v0.12.0 the port also tells an adapter which **payment-method type** the
+payer chose. `ChargeRef::method_type` is `mtn_wallet` or `orange_wallet`, or
+none when the charge was confirmed by the code of a rail serving several types
+(`notchpay`), and on every charge written before the change. An adapter serving one type may ignore it. `notchpay` reads it to
+pick Notch Pay's channel: `cm.mtn` for `mtn_wallet`, `cm.orange` for
+`orange_wallet`, and its configured `cm.mobile` when there is none. Which rail
+serves a method-type confirm is the router's choice in `vpay-core`, made from
+`method_types` and the operator's configured weights; it names no rail. See
+[RFC-0008](vpay:docs/rfc/0008-payment-method-routing.md)'s 2026-10-23 revision.
 
 ```mermaid
 flowchart TD
@@ -209,20 +236,39 @@ was written — and that call has **never been made against MTN** (see
 
 ## Callbacks are hints
 
-MTN and Orange do not sign their notifications or send a shared secret. Notch
-Pay does sign its webhooks, but the port gives `parse_callback` no headers, so
-vpay cannot check the signature; a draft RFC designs that check and nothing
-builds it. So anyone who can reach a callback URL can post anything to it.
-vpay's answer is that a callback is only ever a _hint to look sooner_:
+MTN and Orange do not sign their notifications or send a shared secret, so
+anyone who can reach their callback URLs can post anything to them. Notch Pay
+signs its webhooks, and since v0.12.0 vpay checks that signature
+(`verify_callback`, [RFC-0014](vpay:docs/rfc/0014-verifying-rail-callbacks.md)).
+Either way, vpay's answer is that a callback is only ever a _hint to look
+sooner_:
 
 1. `parse_callback` extracts identifiers and nothing else — the body's `status`
    field is not read.
-2. `POST /provider/{code}/callback` uses those identifiers only to bring the
-   charge's `poll_charge` job forward, enqueueing it first if none is queued. It
-   never writes charge or
-   intent state, and it discards any key material the adapter extracted.
-3. The worker then runs the **authenticated** `query_status` — and that is what
+2. The route finds the charge those identifiers name, then asks the adapter's
+   `verify_callback` whether the callback is the rail's. An `Invalid` or
+   `Unavailable` verdict stops here: the same `202`, nothing enqueued.
+3. Otherwise `POST /provider/{code}/callback` uses the identifiers only to
+   bring the charge's `poll_charge` job forward, enqueueing it first if none is
+   queued. It never writes charge or intent state, and it discards any key
+   material the adapter extracted.
+4. The worker then runs the **authenticated** `query_status` — and that is what
    settles the charge.
+
+A verified signature changes nothing about step 4. What the check buys is that
+an anonymous POST stops pulling a signing rail's polls forward. On Notch Pay
+the signature is a hex HMAC-SHA256 of the raw body under the account's Hash
+Key, in `x-notch-signature`, compared in constant time; the key is the rail's
+`credentials.callback_signing_secret`, with an optional `_previous` for a
+rotation. With no secret configured the verdict is `NoSecret` and the poll is
+pulled forward as before, and a livemode deployment refuses to boot that way
+unless it says `callbacks: { verify: off }`. A rail that declares a check but
+keeps the default `NotChecked` is answered `Unavailable` by the route, so a
+missing check fails closed. Every verdict is counted on
+`vpay_provider_callbacks_total{provider,verdict}`. The check is stub-proven,
+against WireMock and a real Postgres, on a scheme transcribed from Notch Pay's
+guide: **no real Notch Pay webhook has ever been checked**, because none has
+ever reached vpay.
 
 ```mermaid
 sequenceDiagram
@@ -232,9 +278,11 @@ sequenceDiagram
     participant Ad as Adapter
     participant Jobs as jobs table
     participant W as vpay worker
-    Rail->>CB: POST /provider/{code}/callback (unsigned body)
+    Rail->>CB: POST /provider/{code}/callback (headers, raw body)
     CB->>Ad: parse_callback(body)
     Ad-->>CB: CallbackRef (identifiers only, never a status)
+    CB->>Ad: verify_callback(headers, raw body, charge)
+    Ad-->>CB: CallbackVerdict (Invalid or Unavailable stops here, still 202)
     CB->>Jobs: pull poll_charge forward (floor 10 s)
     CB-->>Rail: 202 (same answer whether or not the charge exists)
     Note over CB,Jobs: No charge or intent state is written here
@@ -265,7 +313,9 @@ A job already due within ten seconds (the poll ladder's first rung) is left
 alone, but a charge parked further out is brought forward by every callback. A
 caller who knows a live charge's reference can therefore hold it at roughly one
 authenticated status query per worker claim. vpay's own docs state there is **no
-rate limit**, per charge or per source.
+rate limit**, per charge or per source. Since v0.12.0 that caller needs a valid
+signature on Notch Pay when the deployment holds its signing secret; on MTN and
+Orange, which sign nothing, it needs only the reference.
 :::
 
 ## Stub rails are configuration, not code
@@ -355,21 +405,23 @@ reconciler", the port leaked.
 
 ## Status in this release
 
-| Part                                               | Status                   | Evidence                                                                                                                                                                                      |
-| -------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The trait, capabilities and `Measured` decorator   | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                                                                   |
-| Shared conformance suite over all three rails      | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                                                              |
-| Callback route as a hint                           | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit. MTN's HTTP method and whether Orange's body carries `order_id` are open                                                         |
-| Orange `notif_token` comparison on callbacks       | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                                                                  |
-| MTN charge path over the port                      | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                                                                           |
-| Orange over the port                               | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                                                                   |
-| Notch Pay over the port                            | <Status s="partial" />   | Six payments through the adapter against Notch Pay's real sandbox on 2026-10-21 and -22, on the one-call build; WireMock otherwise; production never called. See [Notch Pay](/rails/notchpay) |
-| `prepare` and `submit_steps`                       | <Status s="unproven" />  | Conformance census plus every submit case driven through `prepare` on `notchpay`, and against WireMock and a real Postgres; never against Notch Pay                                           |
-| `ensure_callback_endpoint` and `callback_url_mode` | <Status s="unproven" />  | Two conformance rules over all three rails; five integration cases against a WireMock Notch Pay; never against a real Notch Pay account                                                       |
-| `NeedsReconciliation`                              | <Status s="partial" />   | Raised and escalated against WireMock and a real Postgres; no real Notch Pay charge has reached `unresolved` through it                                                                       |
-| `accepted_exposure` and its boot warning           | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                                                                    |
-| `refund` through the port                          | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read                                              |
-| 401 → re-mint → retry                              | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                                                                        |
+| Part                                               | Status                   | Evidence                                                                                                                                                                                                                                                         |
+| -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The trait, capabilities and `Measured` decorator   | <Status s="built" />     | Implemented in `vpay-provider`; unit-tested                                                                                                                                                                                                                      |
+| Shared conformance suite over all three rails      | <Status s="built" />     | Runs against real `wiremock/wiremock` containers                                                                                                                                                                                                                 |
+| Callback route as a hint                           | <Status s="partial" />   | Built and tested; never called by a real rail; no rate limit. MTN's HTTP method and whether Orange's body carries `order_id` are open                                                                                                                            |
+| `verify_callback` and `callback_check`             | <Status s="unproven" />  | Stub-proven: Notch Pay's signature check (a scheme transcribed from its "Verify webhooks" guide), the boot refusals and the verdict counter, against WireMock and a real Postgres. No real Notch Pay webhook has ever been received or checked                   |
+| Orange `notif_token` comparison on callbacks       | <Status s="not-built" /> | Route discards the received token; the comparison is unbuilt                                                                                                                                                                                                     |
+| MTN charge path over the port                      | <Status s="partial" />   | Over seven sandbox payments succeeded on 2026-09-15                                                                                                                                                                                                              |
+| Orange over the port                               | <Status s="unproven" />  | WireMock only; Orange has never been called                                                                                                                                                                                                                      |
+| Notch Pay over the port                            | <Status s="partial" />   | Six payments through the adapter against Notch Pay's real sandbox on 2026-10-21 and -22, on the one-call build; WireMock otherwise; production never called. See [Notch Pay](/rails/notchpay)                                                                    |
+| `prepare` and `submit_steps`                       | <Status s="unproven" />  | Conformance census plus every submit case driven through `prepare` on `notchpay`, and against WireMock and a real Postgres. Notch Pay's sandbox answered the two calls as designed when a probe made them; vpay itself has never run the split against Notch Pay |
+| `ensure_callback_endpoint` and `callback_url_mode` | <Status s="unproven" />  | Two conformance rules over all three rails; integration cases against a WireMock Notch Pay; never against a real Notch Pay account by vpay. Off by default on `notchpay` since v0.12.0                                                                           |
+| `method_types` and `ChargeRef::method_type`        | <Status s="unproven" />  | Conformance pins each rail's set; routing and Notch Pay's `cm.mtn` and `cm.orange` channels proven against WireMock and a real Postgres; the per-network channels never sent by vpay to Notch Pay                                                                |
+| `NeedsReconciliation`                              | <Status s="partial" />   | Raised and escalated against WireMock and a real Postgres; no real Notch Pay charge has reached `unresolved` through it                                                                                                                                          |
+| `accepted_exposure` and its boot warning           | <Status s="built" />     | Declared by `notchpay` only; forwarded by `Measured`; logged at every boot                                                                                                                                                                                       |
+| `refund` through the port                          | <Status s="unproven" />  | MTN written and never called; Orange and Notch Pay are `NotImplemented`; nothing settles a `pending` refund — the port has no refund status read                                                                                                                 |
+| 401 → re-mint → retry                              | <Status s="unproven" />  | No mapping exercises it on either rail                                                                                                                                                                                                                           |
 
 The full, dated record is in vpay's
 [provider-port flow § Status](vpay:docs/flows/provider-port.md#status).

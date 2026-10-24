@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.11.0`. Being published
+2026-09-23. The manifest in <Release /> is version `0.12.0`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
@@ -131,8 +131,16 @@ their handset; a redirect rail (Orange) answers `requires_action` with a URL to
 send the payer to ([Payment lifecycle](/payments/lifecycle)). The client also
 exposes `refunds`, `events.list`, `checkout.sessions`, `customers`, `invoices`,
 `invoiceItems`, `accountHolders` and `balance`; the package README covers each.
-`PaymentMethodType` is `"mtn_momo" | "orange_money" | "notchpay"` since
-v0.9.0.
+`PaymentMethodType` holds the three rail codes, `"mtn_momo" | "orange_money" |
+"notchpay"` (`notchpay` since v0.9.0), and since v0.12.0 two **payment-method
+types**, `"mtn_wallet" | "orange_wallet"`. A type names the payer's wallet
+network and leaves the server's router to pick the rail at confirm
+([Payment lifecycle](/payments/lifecycle#which-rail-a-confirm-reaches)). It is
+meaningful in a create's `payment_method_types` only, and needs a server with
+migration `0053`; an older one refuses it as an unknown rail.
+`ConfirmPaymentIntentParams` still names rail codes only, so this SDK cannot
+confirm by type or pin a rail with `payment_method_options[<type>][rail]`: a
+dated ⛔ in the matrix.
 
 Two additions from vpay 0.6.0 are worth knowing:
 
@@ -329,6 +337,8 @@ right bytes" and "the SDK works against vpay".
 | Stripe authenticator                                                 | <Status s="built" />     | Unit-tested and exercised end to end by `sdks/stripe-compat`                    |
 | An empty or all-dots path `id` refused before any request (v0.9.1)   | <Status s="built" />     | Four ✅ rows in the matrix's "Request validation"                               |
 | Every local refusal is a `VpayInvalidParamsError` (v0.10.0)          | <Status s="built" />     | A ✅ row in "Request validation"; no longer a `TypeError`, so a breaking change |
+| `mtn_wallet` and `orange_wallet` on a create (v0.12.0)               | <Status s="built" />     | A ✅ row; the same body byte for byte as the Rust SDK's                         |
+| Confirm by payment-method type, or pinned to a rail                  | <Status s="not-built" /> | A dated ⛔ row: `ConfirmPaymentIntentParams` names rail codes only              |
 | Retries, `request-id`, `stripe-should-retry`, `events.retrieve`      | <Status s="not-built" /> | Dated ⛔ rows in the parity matrix                                              |
 
 The full record is the Node column of

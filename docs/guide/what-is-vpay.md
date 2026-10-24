@@ -13,6 +13,8 @@ sources:
   - docs/flows/adapter-notchpay.md
   - docs/status.md
   - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
+  - docs/api/README.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
 skills:
   - vpay
   - vpay-provider-adapters
@@ -70,9 +72,19 @@ save it before asking for it. Since v0.11.0 vpay asks in two calls: the first
 creates the payment and prompts nobody, vpay commits the reference it
 returns, and only then does the second call prompt the payer
 ([crash safety](/payments/crash-safety#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)).
-That split is proven against WireMock only. Until v0.11.0 one call did both,
+vpay has run that split against WireMock only; Notch Pay's side of it was
+measured through vpay's probe on 2026-10-23. Until v0.11.0 one call did both,
 and a crash between the prompt and the commit left a payment vpay could not
 read.
+
+Since v0.12.0 a merchant need not pick the rail at all. An intent may name the
+payer's network, `mtn_wallet` or `orange_wallet`, and vpay ranks the enabled
+rails that serve it and charges the first. Orange's network is served by two
+rails with different journeys, `orange_money` (redirect) and Notch Pay (push),
+so which column applies is decided by the rail the ranking picks, and a
+merchant's server confirming one must pin a rail to know which fields to send.
+The ranking's formula is provisional: one weight the operator configures per rail
+([Merchant API](vpay:docs/api/README.md)).
 
 The last row matters more than the others. On a push rail the payer's phone
 starts buzzing as soon as vpay calls MTN, so vpay must save the reference
@@ -136,12 +148,12 @@ flowchart LR
     WK -->|"signed webhooks"| M
 ```
 
-| Surface                          | Who calls it                                                            | Today                                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `/v1`                            | A merchant's server, with a bearer token from `POST /v1/oauth/token`    | Payment intents, checkout sessions, customers, invoices, events, refunds, account holders |
-| `/v1/browser`                    | A payer's page, with a publishable key and the intent's `client_secret` | Built, and walked by a real browser against stub rails                                    |
-| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                       | Proven against WireMock. **No rail has ever called it**                                   |
-| `/dash/v1`                       | The dashboard app's server, under a staff session                       | Staff sign-in and read routes. None of the dashboard writes ADR-0008 describes is built   |
+| Surface                          | Who calls it                                                            | Today                                                                                                                                                                               |
+| -------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/v1`                            | A merchant's server, with a bearer token from `POST /v1/oauth/token`    | Payment intents, checkout sessions, customers, invoices, events, refunds, account holders                                                                                           |
+| `/v1/browser`                    | A payer's page, with a publishable key and the intent's `client_secret` | Built, and walked by a real browser against stub rails                                                                                                                              |
+| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                       | Proven against WireMock. **No rail has ever called it**. Since v0.12.0 it checks Notch Pay's signature, where its Hash Key is configured, before a callback may pull a poll forward |
+| `/dash/v1`                       | The dashboard app's server, under a staff session                       | Staff sign-in and read routes. None of the dashboard writes ADR-0008 describes is built                                                                                             |
 
 `GET /v1/balance` is not routed anywhere, and it answers an honest `404`. A
 refund can be created, but a `201` does not mean money came back. Nothing in

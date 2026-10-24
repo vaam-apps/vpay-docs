@@ -60,7 +60,7 @@ The fast path is a `vpay-release` dispatch from vpay's own
 tag lands. It merged on 2026-09-23
 ([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)), and this
 repository's `release-parity` runs show a `vpay-release` dispatch arriving on
-each vpay tag date from v0.5.0 to v0.11.0. The 3-hourly poll stays as the
+each vpay tag date from v0.5.0 to v0.12.0. The 3-hourly poll stays as the
 fallback.
 
 ## What the check refuses
@@ -137,6 +137,9 @@ v0.10.3 and v0.10.4 PRs were merged unsigned. The v0.11.0 PR recorded v0.10.4
 under `previous`, which nobody had signed, so its stale list named 30 pages:
 only what v0.11.0 changed. The re-read that signed the lock off against v0.11.0
 started from v0.10.2, the last release a person had signed, and covered 33.
+
+That lock was signed, so the v0.12.0 PR's `previous` is v0.11.0, a release a
+person had signed, and its stale list of 32 pages was the whole re-read.
 
 ## How a page declares what it covers
 

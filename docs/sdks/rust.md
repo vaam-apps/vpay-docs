@@ -130,6 +130,18 @@ status: a rail refusal returns the intent to `RequiresPaymentMethod` with
 `last_payment_error.code` is an open `String` on purpose, so a failure code
 newer than your SDK still decodes.
 
+`PaymentMethodType`, which a create's `payment_method_types` takes, gained two
+**payment-method types** in v0.12.0: `MtnWallet` and `OrangeWallet`
+(`mtn_wallet`, `orange_wallet` on the wire). A type names the payer's wallet
+network and leaves the server's router to pick the rail at confirm
+([Payment lifecycle](/payments/lifecycle#which-rail-a-confirm-reaches)); the
+three rail codes still mean that rail, pinned, and one list may mix both. A
+type needs a server with migration `0053`, and an older one refuses it as an
+unknown rail. The enum is `#[non_exhaustive]`, so the new variants break no
+caller. `ConfirmPaymentIntentParams` still has rail variants only, so this SDK
+cannot confirm by type or pin a rail with
+`payment_method_options[<type>][rail]`: a dated ⛔ in the matrix.
+
 The client exposes `payment_intents()`, `checkout().sessions()`, `customers()`,
 `invoices()`, `invoice_items()`, `refunds()`, `events()`, `balance()` and
 `account_holders()`. As in Node, there is no `events().retrieve()`, and
@@ -260,6 +272,8 @@ no money moves. [Demo runbook](/operate/runbooks#demo).
 | Handshake, token cache, single re-auth      | <Status s="built" />     | Parity ✅ rows; real-verifier conformance test                                                    |
 | `/v1` resource methods                      | <Status s="built" />     | Every method's wire shape pinned; byte-identical to Node                                          |
 | Empty or all-dots path `id` refused         | <Status s="built" />     | Since v0.9.1, on all twenty-one id-taking methods, before any request; four ✅ rows in the matrix |
+| `MtnWallet` and `OrangeWallet` on a create  | <Status s="built" />     | Since v0.12.0; a ✅ row, the same body byte for byte as Node's                                    |
+| Confirm by payment-method type, or pinned   | <Status s="not-built" /> | A dated ⛔ row: `ConfirmPaymentIntentParams` has rail variants only                               |
 | Refunds and invoices against a running vpay | <Status s="partial" />   | Live suites against WireMock rails; no refund ever settles                                        |
 | `token_type` validation, timeout test       | <Status s="not-built" /> | Dated ⛔ rows                                                                                     |
 | An `async-stripe` authenticator             | <Status s="not-built" /> | Dated ⛔: `async-stripe` has no per-request hook                                                  |

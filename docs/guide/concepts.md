@@ -18,6 +18,10 @@ sources:
   - docs/status/verification/2026-10-21-notchpay-step5.md
   - docs/status/verification/2026-10-22-notchpay-b3b.md
   - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
+  - docs/rfc/0008-payment-method-routing.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
+  - docs/status/verification/2026-10-23-webhook-signatures.md
 skills:
   - vpay-payments
   - vpay-reconciler
@@ -117,19 +121,38 @@ The core never asks _which_ rail it is talking to. It reads the rail's declared
 | `supports_refunds`         | `true`     | `true`         | `true`     |
 | `supports_partial_refunds` | `true`     | `false`        | `true`     |
 
-That is three of the nine the port declares; the others are listed on
+That is three of the eleven the port declares; the others are listed on
 [the provider port](/rails/provider-port#branch-on-capabilities-never-on-provider-codes).
 
 Code outside an adapter crate that branches on a provider code, as in
 `if provider == "mtn_momo"`, is a defect. Adding a rail means making the one
 shared conformance suite pass, not writing a new suite.
 
+## Payment-method types: the payer picks a network, vpay picks the rail
+
+Since v0.12.0 a **payment-method type** is separate from a rail. A type is what
+the payer uses, such as `mtn_wallet` or `orange_wallet`; a rail is the adapter
+that processes it, and each rail declares the types it serves (`notchpay`
+serves both). `payment_method_types` takes either: a rail code still means that
+rail, pinned, and a type lets vpay choose. On a confirm by type, a router in
+`vpay-core` keeps the rails that serve the type, are enabled and settle the
+currency, ranks them, charges the first, and records why in the charge's
+transaction. The ranking today has one provisional component, a weight the
+operator configures; the fee is the next component, and is not built. No
+measured quantity moves traffic on its own. A decline never moves the intent
+to another rail. The decision is not on any `/v1` object yet, and neither SDK
+can send a confirm by type. Full pages: [the merchant API](/api/) and
+[the provider port](/rails/provider-port).
+
 ## Callbacks are hints
 
 Mobile-money callbacks are usually unauthenticated and unsigned, and they can be
 late, missing or duplicated. So a callback **never changes state**.
 `POST /provider/{code}/callback` asks the adapter's `parse_callback` for
-**identifiers only**, never a status, and enqueues a status query. The only
+**identifiers only**, never a status, and enqueues a status query. Since
+v0.12.0, on a rail that signs its callbacks and whose signature vpay checks
+(Notch Pay only), a callback that fails the check enqueues nothing; one that
+passes is still only a hint. The only
 thing that moves money is the **authenticated status query** vpay makes to the
 rail. `parse_callback` is synchronous on purpose: it cannot make a network call,
 so it cannot sneak a status in from the request. A missed callback costs
@@ -140,8 +163,8 @@ for a `200` so that it does not retry, and vpay answers `202`; whether that
 counts is an open question. Full page: [Reconciler](/payments/reconciler).
 
 ::: warning Never received from a real rail
-The callback route is proven against WireMock. MTN, Orange and Notch Pay have
-never called it.
+The callback route and Notch Pay's signature check are proven against WireMock.
+MTN, Orange and Notch Pay have never called the route.
 :::
 
 ## One charge per intent
@@ -171,7 +194,7 @@ can act at different moments.
   submit response is lost, no payment can have happened.
 
 Notch Pay, a push rail, fits neither: it names a payment by its own reference,
-which exists only in the answer to its first call. Since <Release /> vpay calls
+which exists only in the answer to its first call. Since v0.11.0 vpay calls
 it in two steps, with the reference committed after the first, which prompts
 nobody, and before the second, which prompts the payer. That is proven against
 WireMock and a real Postgres only.
@@ -236,7 +259,7 @@ A late success, at minute 40 or at hour 30, is normal. The intent stayed
 refused as `Malformed` and settles nothing: the charge stays as it was and the
 polling goes on. A read it understood perfectly and cannot accept, such as a
 Notch Pay `complete` for less than the charge's amount, settles nothing either,
-and since <Release /> it makes the charge `unresolved` for a person at once
+and since v0.11.0 it makes the charge `unresolved` for a person at once
 instead of after 24 hours. Full page: [Reconciler](/payments/reconciler).
 
 ## Status in this release
@@ -249,7 +272,8 @@ instead of after 24 hours. Full page: [Reconciler](/payments/reconciler).
 | Idempotency keys               | <Status s="partial" />  | Required on every `/v1` `POST`, and stored for 24 hours                                                                                                                                                                                                                     |
 | Crash safety                   | <Status s="partial" />  | `SIGKILL` tests cover two of the three kill points on MTN. Orange is not exercised by the kill test. Notch Pay's two-step recovery is proven against WireMock and a real Postgres, not under a real signal                                                                  |
 | Reconciler                     | <Status s="partial" />  | Ladder and 24-hour escalation are built and tested, and so is the immediate escalation of an answer only a person can settle; the prompt-expiry rung is not built. Rail evidence is WireMock, over seven successful MTN sandbox payments and six Notch Pay sandbox payments |
-| Callbacks as hints             | <Status s="unproven" /> | Route proven against WireMock, never called by a real rail                                                                                                                                                                                                                  |
+| Callbacks as hints             | <Status s="unproven" /> | Route and Notch Pay's signature check proven against WireMock, never called by a real rail                                                                                                                                                                                  |
+| Payment-method types           | <Status s="partial" />  | Types, the router and the recorded decision proven against WireMock and a real Postgres; one provisional score component; the checkout page's rendering of a type is untested, and the SDKs cannot send one                                                                 |
 | Webhooks                       | <Status s="partial" />  | Signed and delivered through the outbox, to receivers on a compose network only                                                                                                                                                                                             |
 
 Each concept's own page carries the full record. The index of vpay's flow

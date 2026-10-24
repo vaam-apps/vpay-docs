@@ -14,6 +14,9 @@ sources:
   - docs/rfc/0013-vpay-registers-its-own-callbacks.md
   - docs/runbooks/callback-endpoints.md
   - docs/status/verification/2026-10-23-needs-reconciliation.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
+  - docs/status/verification/2026-10-23-webhook-signatures.md
+  - docs/status/verification/2026-10-23-notchpay-defaults-and-wrong-network.md
 skills:
   - vpay-reconciler
 ---
@@ -163,9 +166,9 @@ deferred deliberately. Only the 24-hour rung runs.
 
 A rail's callback never changes state. `POST /provider/{code}/callback` extracts
 identifiers only (the adapter's `parse_callback` cannot return a status), looks
-the reference up, and in one transaction enqueues the charge's poll (a no-op if
-it already exists) and pulls it forward. The
-authenticated status query is the only thing that moves money.
+the reference up, asks the rail's adapter to check the callback, and in one
+transaction enqueues the charge's poll (a no-op if it already exists) and pulls
+it forward. The authenticated status query is the only thing that moves money.
 
 The route answers `202` whether or not the reference names a charge — on
 purpose, so that an unauthenticated endpoint is not an oracle for "does this
@@ -181,7 +184,9 @@ flowchart LR
     PC -->|"not a notification this rail could send"| BR["400"]
     PC --> V{"reference names a charge?"}
     V -->|"no"| X["202, logged at info"]
-    V -->|"yes"| J["one transaction - enqueue poll ON CONFLICT DO NOTHING, then pull it forward"]
+    V -->|"yes"| VC{"verify_callback - headers and raw body"}
+    VC -->|"Invalid or Unavailable"| W["202, nothing moved, logged at warn"]
+    VC -->|"Verified, NotChecked or NoSecret"| J["one transaction - enqueue poll ON CONFLICT DO NOTHING, then pull it forward"]
     J --> OK["202"]
     J -.->|"the worker later"| Q["authenticated status query settles it"]
 ```
@@ -193,17 +198,36 @@ happen anyway. There is **no rate limit** on the route beyond that, and **no
 rail has ever called it**: every body it has parsed was transcribed from vpay's
 own adapter docs.
 
+**A rail that signs its callbacks has them checked**
+([RFC-0014](vpay:docs/rfc/0014-verifying-rail-callbacks.md), since v0.12.0).
+Between finding the charge and moving its poll, the route hands the adapter the
+headers and the raw body (`verify_callback`). Only `notchpay` checks: its
+`x-notch-signature`, where the rail's Hash Key is configured
+([Notch Pay](/rails/notchpay#webhook-signatures)). MTN and Orange answer
+`NotChecked`. A refused callback gets the same `202` and moves nothing, and the
+ladder still asks the rail at its next rung. A verified one is still only a
+hint: what the check buys is that an anonymous POST stops pulling a signing
+rail's polls forward. Each verdict is counted on
+`vpay_provider_callbacks_total{provider,verdict}`. The check is proven against
+a WireMock Notch Pay and a real Postgres, and has **never checked a webhook
+Notch Pay sent**
+([verification](vpay:docs/status/verification/2026-10-23-webhook-signatures.md)).
+
 **Where a rail sends its callbacks** is a capability of the adapter
 (`Capabilities::callback_url_mode`). MTN and Orange are told the URL on every
-submit. Notch Pay holds it registered against the merchant's account, and since
-v0.11.0 vpay keeps it there itself: the worker's sixth singleton,
-`ensure:callbacks`, lists the account's endpoints at every worker start and
-hourly and creates vpay's when it is missing
-([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md),
-[Notch Pay](/rails/notchpay#configuration)). It never modifies or deletes an
-endpoint. It is proven against a WireMock Notch Pay only. None of this changes
-what a callback can do, and a rail with no endpoint registered sends nothing:
-its charges settle by polling.
+submit. Notch Pay holds it registered against the merchant's account. The
+worker's sixth singleton, `ensure_callbacks`, can keep it there: with a rail's
+`callbacks.register: ensure` it lists the account's endpoints at every worker
+start and hourly and creates vpay's when it is missing, and with `check` it
+only lists and reports
+([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)). It never
+modifies or deletes an endpoint, and it is proven against a WireMock Notch Pay
+only. **Since v0.12.0 Notch Pay's default is `off`**: with `register` unset,
+vpay asks a Notch Pay account nothing, and the operator registers vpay's URL in
+Notch Pay's dashboard ([Notch Pay](/rails/notchpay#callbacks)). The sandbox had
+stored an endpoint created through Notch Pay's API with no URL, and delivered
+nothing to it. None of this changes what a callback can do, and a rail with no
+endpoint registered sends nothing: its charges settle by polling.
 
 **A callback that never arrives costs time, not correctness.** MTN's own
 documentation says it sends a callback once and has no retry mechanism, and no
@@ -288,18 +312,19 @@ each. Two rules from it are worth knowing before an incident:
 
 ## Status in this release
 
-| Part                                                | Status                   | Evidence                                                                                                                                                                                                        |
-| --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Durable queue, claim, leases                        | <Status s="built" />     | `two_workers_claiming_together_never_take_the_same_job`; lease reaping at boot and on its timer                                                                                                                 |
-| Poll ladder and 24-hour escalation                  | <Status s="partial" />   | `worker_recovery.rs`, `worker_e2e.rs` against real Postgres and a WireMock rail; Notch Pay's sandbox run (2026-10-21) watched the first 15 minutes of the ladder; the 24-hour escalation was not observed there |
-| Immediate escalation of `NeedsReconciliation`       | <Status s="partial" />   | Four cases in `worker_recovery.rs` against WireMock's Notch Pay and a real Postgres, at the production horizon; no real Notch Pay charge has reached `unresolved` this way                                      |
-| Callback endpoint registration (`ensure:callbacks`) | <Status s="unproven" />  | `callback_registration.rs`, five cases against a WireMock Notch Pay and a real Postgres; never run against a real Notch Pay account                                                                             |
-| Callback route                                      | <Status s="partial" />   | Eleven cases in `provider_callback.rs`; **no rail has ever called it**; MTN's `PUT` or `POST` and Orange's `order_id` are open                                                                                  |
-| Graceful drain under SIGTERM                        | <Status s="partial" />   | Both arms in `worker_kill9.rs`; MTN only, rail and receiver are WireMock                                                                                                                                        |
-| `prompt_ttl_seconds` / `prompt_expired_at`          | <Status s="not-built" /> | No column, no config key, no event                                                                                                                                                                              |
-| Refund polling                                      | <Status s="not-built" /> | No refund status read on the port                                                                                                                                                                               |
-| Contradiction alert call sites                      | <Status s="unproven" />  | Wired; not reached by any test                                                                                                                                                                                  |
-| Operator runbooks                                   | <Status s="unproven" />  | Queries run against a migrated database; never followed against a running deployment                                                                                                                            |
+| Part                                                | Status                   | Evidence                                                                                                                                                                                                                             |
+| --------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Durable queue, claim, leases                        | <Status s="built" />     | `two_workers_claiming_together_never_take_the_same_job`; lease reaping at boot and on its timer                                                                                                                                      |
+| Poll ladder and 24-hour escalation                  | <Status s="partial" />   | `worker_recovery.rs`, `worker_e2e.rs` against real Postgres and a WireMock rail; Notch Pay's sandbox run (2026-10-21) watched the first 15 minutes of the ladder; the 24-hour escalation was not observed there                      |
+| Immediate escalation of `NeedsReconciliation`       | <Status s="partial" />   | Four cases in `worker_recovery.rs` against WireMock's Notch Pay and a real Postgres, at the production horizon; no real Notch Pay charge has reached `unresolved` this way                                                           |
+| Callback endpoint registration (`ensure_callbacks`) | <Status s="unproven" />  | `callback_registration.rs`, six cases against a WireMock Notch Pay and a real Postgres, one proving an unset `register` asks a Notch Pay account nothing; never run against a real Notch Pay account; `off` for Notch Pay unless set |
+| Callback route                                      | <Status s="partial" />   | Eleven cases in `provider_callback.rs`; **no rail has ever called it**; MTN's `PUT` or `POST` and Orange's `order_id` are open                                                                                                       |
+| Callback signature check (RFC-0014)                 | <Status s="unproven" />  | `a_webhook_the_rail_did_not_sign_moves_nothing_and_a_signed_one_settles` against a WireMock Notch Pay and a real Postgres, each guard mutation-checked; never run on a webhook Notch Pay sent                                        |
+| Graceful drain under SIGTERM                        | <Status s="partial" />   | Both arms in `worker_kill9.rs`; MTN only, rail and receiver are WireMock                                                                                                                                                             |
+| `prompt_ttl_seconds` / `prompt_expired_at`          | <Status s="not-built" /> | No column, no config key, no event                                                                                                                                                                                                   |
+| Refund polling                                      | <Status s="not-built" /> | No refund status read on the port                                                                                                                                                                                                    |
+| Contradiction alert call sites                      | <Status s="unproven" />  | Wired; not reached by any test                                                                                                                                                                                                       |
+| Operator runbooks                                   | <Status s="unproven" />  | Queries run against a migrated database; never followed against a running deployment                                                                                                                                                 |
 
 The full record is the **Status** section of
 [the reconciler flow](vpay:docs/flows/reconciler.md#status).

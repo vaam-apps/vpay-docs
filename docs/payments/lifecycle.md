@@ -9,6 +9,9 @@ sources:
   - backends/crates/vpay-core/src/state.rs
   - backends/crates/vpay-db/src/payment_intents.rs
   - docs/status/verification/2026-10-22-notchpay-b3b.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
+  - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
+  - docs/rfc/0008-payment-method-routing.md
 skills:
   - vpay-payments
   - vpay-reconciler
@@ -121,6 +124,23 @@ a second charge be inserted the moment the first moved to `failed` — and a
 **So a retry means a new PaymentIntent.** This is the one place vpay's API is
 noticeably less convenient than Stripe's, on purpose.
 
+## Which rail a confirm reaches
+
+A confirm that names a rail code (`mtn_momo`, `orange_money`, `notchpay`)
+charges that rail. Since v0.12.0 it may instead name the payer's wallet network,
+a **payment-method type** (`mtn_wallet` or `orange_wallet`). Then vpay
+**routes** it: it ranks every enabled rail that serves the type and settles the
+currency, and charges the first, unless
+`payment_method_options[<type>][rail]` pins one. The transaction that opens the
+charge also commits a `routing_decisions` row explaining the choice.
+
+The lifecycle does not change. The states are the same, the intent still holds
+one charge, and a decline does not move it to another rail. The ranking's
+formula is provisional: one component, a weight the operator configures per
+rail, equal by default
+([RFC-0008](vpay:docs/rfc/0008-payment-method-routing.md),
+[verification](vpay:docs/status/verification/2026-10-23-method-type-routing.md)).
+
 ## Create, confirm, settle: push rail
 
 ```mermaid
@@ -192,8 +212,12 @@ succeeded, three failed with the code vpay maps them to, and one that read
 run ended 15 minutes later. Those runs used the one-call build: since v0.11.0
 Notch Pay's push is two port calls with a commit between them
 ([crash safety](/payments/crash-safety#two-step-push-rails-notch-pay-commit-the-rail-s-reference-before-the-prompt)),
-and that split has met WireMock only. The redirect sequence has never met Orange,
-and no webhook has ever reached a merchant endpoint outside the vpay repository.
+and vpay has run that split against WireMock only. Notch Pay's sandbox answered
+the same two calls as the split expects when vpay's probe made them on
+2026-10-23
+([verification](vpay:docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md)).
+The redirect sequence has never met Orange, and no webhook has ever reached a
+merchant endpoint outside the vpay repository.
 :::
 
 ## What confirm can answer
@@ -216,7 +240,7 @@ and no webhook has ever reached a merchant endpoint outside the vpay repository.
 | `canceled`                | Withdrawn before any rail saw it                                                       | Nothing will be charged                                                                  |
 
 A decline carries a `FailureCode`, and which codes are reachable depends on the
-rail: MTN can produce all eleven, Orange only three and Notch Pay five. See
+rail: MTN can produce all eleven, Orange only three and Notch Pay six. See
 [failure codes](/payments/failures).
 
 ## What can go wrong

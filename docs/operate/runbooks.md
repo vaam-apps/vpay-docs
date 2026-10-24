@@ -24,6 +24,8 @@ sources:
   - docs/runbooks/worker-queue.md
   - docs/status/verification/2026-10-22-notchpay-b3b.md
   - docs/status/verification/2026-10-22-notchpay-refunds.md
+  - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
+  - docs/rfc/0013-vpay-registers-its-own-callbacks.md
   - deploy/helm/vpay/ci/prometheusrule.test.yaml
 skills:
   - vpay-ops
@@ -45,7 +47,8 @@ named in each section below: SQL executed against a scratch Postgres, states
 produced by integration tests, and three procedures (the demo, the checkout
 integration and the MTN sandbox test) that have genuinely been run end to end on
 one machine. A fourth, the Notch Pay sandbox test, has been run against Notch
-Pay's sandbox except its webhook and endpoint-registration steps. Every alert
+Pay's sandbox, except that no webhook has ever been delivered and vpay's own
+endpoint registration (B4) has not run. Every alert
 threshold is proposed. Since v0.11.0 each of the six alert rules is tested by
 `promtool` against **synthetic** series, which proves each expression fires on
 the series it is written for; no Prometheus has ever scraped a vpay process.
@@ -166,10 +169,16 @@ looks for are produced by the worker's integration suite.
 ### Callback endpoints
 
 **When:** `VpayCallbackEndpointUnconfirmed` fires — for three hours, no pass of
-the worker's `ensure:callbacks` job confirmed vpay's callback endpoint on a rail
+the worker's `ensure_callbacks` job confirmed vpay's callback endpoint on a rail
 that keeps it registered with the account (today only Notch Pay). New in
 v0.11.0.
 
+- **It never fires for a rail whose `register` is `off`**: the pass skips that
+  rail and counts nothing. Since v0.12.0 that is Notch Pay's default, so on a
+  deployment that leaves `register` unset the alert says nothing about Notch
+  Pay at all, and the operator registers the endpoint in Notch Pay's dashboard.
+  Set `register: check` to have it watch a hand-registered endpoint, which must
+  then carry vpay's description.
 - **It costs latency, not money.** Callbacks are hints: every charge still
   settles by polling, but nothing pulls the poll forward. It is a `warning`,
   never `critical`.
@@ -179,7 +188,9 @@ v0.11.0.
 - `missing` under `register: check` means vpay may not create the endpoint: set
   `ensure`, or register it by hand with **vpay's description**, because Notch
   Pay answers `"url": null` and vpay recognises its endpoint by description
-  only. `drifted` means vpay's endpoint lacks one of the five payment events:
+  only. On Notch Pay prefer the hand-made one: in the sandbox an endpoint
+  created through the API, as `ensure` does, was stored with no URL and
+  delivered nothing. `drifted` means vpay's endpoint lacks one of the five payment events:
   delete it in Notch Pay's dashboard and let the next `ensure` pass create a
   correct one, because vpay never modifies or deletes an endpoint. `locked` for
   three hours means something holds the advisory lock `vpaycbk`.
@@ -190,7 +201,7 @@ _Evidence:_ written with the rule on 2026-10-23; the rule is tested by
 `promtool` against synthetic series only, and the registration it watches has
 never run against a real Notch Pay account.
 [docs/runbooks/callback-endpoints.md](vpay:docs/runbooks/callback-endpoints.md)
-· background: [Notch Pay](/rails/notchpay#configuration)
+· background: [Notch Pay](/rails/notchpay#callbacks)
 
 ### Webhook delivery failures
 
@@ -387,7 +398,10 @@ Notch Pay test-mode account.
 - **Part A** is a probe, `cargo build -p vpay-notchpay --example sandbox_probe`,
   that asks Notch Pay's sandbox the open questions and writes a redacted report.
   It runs in phases: a read-only one first, then payments, then webhooks, and
-  a read-only `search` phase that looks a payment up by reference.
+  a read-only `search` phase that looks a payment up by reference. **A7**
+  adds four more: `two-step` (initialize now, process later), `channels`
+  (every outcome number on `cm.mtn` and `cm.orange`), `webhook-receive` (one
+  endpoint at a URL you can read) and `webhook-update`.
 - **Part B** runs vpay itself with `--profile notchpay-sandbox` (still
   `livemode: false`) and takes three sandbox payments through the adapter: one
   that succeeds, one that fails, and one that collects less than was asked. That
@@ -397,7 +411,14 @@ Notch Pay test-mode account.
   and an Orange success. **B4** registers vpay's webhook endpoint on the
   account, one `POST /webhooks` that Notch Pay keeps until someone deletes it in
   the dashboard; the profile ships with `register: check` so that nothing else
-  creates one.
+  creates one. Since v0.12.0 no deployment registers one unless told to, and
+  the runbook says to run B4 only to measure it again, on the maintainer's
+  approval.
+- **Delete any API-created endpoint before running payments.** In the 2026-10-23
+  run the endpoint `webhook-receive` created could not be read, repaired or
+  deleted through the API (`404`), and every payment processed after it existed
+  stayed `processing`. Delete it in the dashboard, by the id the probe printed,
+  and run `read` first to confirm the list is empty.
 - Test keys only: boot refuses a key with neither `test.` nor `test_` outside
   livemode. Keep them in an env file outside the repository, and never paste
   one anywhere.
@@ -423,21 +444,28 @@ about 12 s after create
 The probe's refund phase (A6) ran the same day, and every `POST /refunds`
 answered `403`
 ([verification](vpay:docs/status/verification/2026-10-22-notchpay-refunds.md)).
-**B4 and A4 have not been run.** It is evidence about Notch Pay's sandbox only:
-no production, no live key, no refund, no webhook, no endpoint registered, and
-the one-call build, not v0.11.0's two-step submit.
+**A7 ran on 2026-10-23**, from a cloud session, through the probe and not vpay
+([verification](vpay:docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md)):
+Notch Pay's side of the two-step split and of the per-network channels was
+measured, and an endpoint created at a public capture inbox was stored with
+`"url": null` and received nothing in 21 minutes. **B4 and A4 have not been
+run.** It is evidence about Notch Pay's sandbox only: no production, no live
+key, no refund, no webhook delivered, no endpoint registered by vpay, and
+through vpay the one-call build only, not the two-step submit or the
+per-network channels. The profile configures no signing secret, so the run
+also says nothing about vpay's signature check.
 [docs/runbooks/notchpay-sandbox-test.md](vpay:docs/runbooks/notchpay-sandbox-test.md)
 · background: [Notch Pay](/rails/notchpay)
 
 ## Status in this release
 
-| Runbook group                                               | Status                  | Evidence                                                                                                                                                                                                                    |
-| ----------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Demo, checkout, live sandbox test                           | <Status s="built" />    | Executed end to end on one machine; checkout in CI via Cypress                                                                                                                                                              |
-| Worker queue, webhook failures, migrations, restore         | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment                                                                                                                                               |
-| Deploy/rollback, both rotations, release                    | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster                                                                                                                                        |
-| Unresolved charges, provider error rate, callback endpoints | <Status s="unproven" /> | Rules tested by `promtool` against synthetic series only; never evaluated against vpay's own metrics; thresholds proposed                                                                                                   |
-| Notch Pay sandbox test                                      | <Status s="partial" />  | Part A (the probe) and Part B (three payments through vpay) run against the sandbox on 2026-10-21, B3b (three more) and A6 (refunds, all `403`) on 2026-10-22; the webhook step (A4) and endpoint registration (B4) not run |
+| Runbook group                                               | Status                  | Evidence                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Demo, checkout, live sandbox test                           | <Status s="built" />    | Executed end to end on one machine; checkout in CI via Cypress                                                                                                                                                                                                                                              |
+| Worker queue, webhook failures, migrations, restore         | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment                                                                                                                                                                                                                               |
+| Deploy/rollback, both rotations, release                    | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster                                                                                                                                                                                                                        |
+| Unresolved charges, provider error rate, callback endpoints | <Status s="unproven" /> | Rules tested by `promtool` against synthetic series only; never evaluated against vpay's own metrics; thresholds proposed                                                                                                                                                                                   |
+| Notch Pay sandbox test                                      | <Status s="partial" />  | Part A (the probe) and Part B (three payments through vpay) run against the sandbox on 2026-10-21, B3b (three more) and A6 (refunds, all `403`) on 2026-10-22, A7 (two-step, channels, a capture endpoint) on 2026-10-23 through the probe; no webhook delivered; A4 and endpoint registration (B4) not run |
 
 The authoritative account of what each page has and has not been exercised
 against is [docs/runbooks/README.md](vpay:docs/runbooks/README.md).

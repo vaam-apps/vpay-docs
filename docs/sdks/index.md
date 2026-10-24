@@ -8,6 +8,9 @@ status: partial
 sources:
   - docs/sdks/README.md
   - docs/sdks/parity.md
+  - docs/status/merchant-sdks.md
+  - sdks/nodejs/src/types.ts
+  - sdks/rust/src/model.rs
   - docs/adr/0015-sdk-parity.md
   - docs/flows/merchant-auth.md
   - docs/flows/tauri-checkout.md
@@ -128,6 +131,8 @@ of it at <Release />:
 | Retries beyond that single `401`                                                                                                         | ⛔ none, deliberately                                                     | ⛔ none, deliberately                                                 |
 | `payment_intents`, `refunds`, `checkout.sessions`, `customers`, `invoices`, `invoice_items`, `account_holders`, `balance`, `events.list` | ✅                                                                        | ✅                                                                    |
 | `payment_intents.confirm` on `notchpay`, the second push rail                                                                            | ✅                                                                        | ✅                                                                    |
+| `payment_intents.create` with a payment-method type (`mtn_wallet`, `orange_wallet`) beside a rail code                                   | ✅                                                                        | ✅                                                                    |
+| `payment_intents.confirm` by payment-method type, or pinned to a rail with `payment_method_options[<type>][rail]`                        | ⛔ `ConfirmPaymentIntentParams` names rail codes only                     | ⛔ the same                                                           |
 | The `customer` list filter and `invoices.pay` out of band                                                                                | ✅                                                                        | ✅                                                                    |
 | An empty or all-dots path `id` refused before any request (v0.9.1)                                                                       | ✅                                                                        | ✅                                                                    |
 | Every local refusal is the SDK's own error type, caught with the rest                                                                    | ✅ `Error::InvalidParams`                                                 | ✅ `VpayInvalidParamsError` since v0.10.0 (a bare `TypeError` before) |
@@ -153,6 +158,16 @@ collected less than its amount and was never counted as a success
 Neither is production, and the Notch Pay runs used no payer-side client. The
 matrix also has its own tables for the browser client, the Flutter plugin and
 the Tauri plugin; see their pages.
+
+Both SDKs can **create** an intent that names the payer's wallet network
+(`mtn_wallet`, `orange_wallet`) instead of a rail, and leave the server's
+router to pick the rail when it is confirmed. Neither can **confirm** one by
+type: the server routes such a confirm, and a merchant reaches it through the
+hosted checkout or raw HTTP. A type needs a server with migration `0053`; an
+older one refuses it as an unknown rail. See
+[Payment lifecycle](/payments/lifecycle#which-rail-a-confirm-reaches) for how
+the rail is picked, and
+[merchant-sdks.md](vpay:docs/status/merchant-sdks.md) for the dated gap.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:

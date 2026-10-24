@@ -11,6 +11,7 @@ sources:
   - docs/runbooks/live-sandbox-test.md
   - docs/runbooks/rotate-rail-credentials.md
   - docs/flows/reconciler.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
 skills:
   - vpay-mtn-momo
   - vpay-provider-adapters
@@ -22,10 +23,16 @@ MTN Mobile Money Cameroon is vpay's **push** rail: vpay asks MTN to prompt the
 payer's handset, the payer approves with their PIN, and vpay learns the outcome
 by asking MTN — never by trusting a notification. It was the first rail vpay
 called for real: over seven payments succeeded against MTN's **sandbox** during
-testing on 2026-09-15. (Notch Pay's sandbox has since taken three payments
-through vpay; see [Notch Pay](/rails/notchpay). Orange has never been called.)
-Everything else on this page — refunds, the decline vocabulary, production, the
-callback — is proven against WireMock stubs or not at all.
+testing on 2026-09-15. (Notch Pay's sandbox has since taken six payments
+through vpay's adapter; see [Notch Pay](/rails/notchpay). Orange has never been
+called.) Everything else on this page — refunds, the decline vocabulary,
+production, the callback — is proven against WireMock stubs or not at all.
+
+Since v0.12.0 `mtn_momo` serves the payment-method type `mtn_wallet`, and so
+does `notchpay`. A confirm by type is routed to one of the two (see
+[the merchant API](/api/#payment-method-types-and-routing)); with the default
+equal weights the tie-break sends `mtn_wallet` here. A merchant naming the
+rail code `mtn_momo` gets this rail, as before.
 
 Agents working on this adapter should load [vpay-mtn-momo](skill:vpay-mtn-momo).
 
@@ -97,7 +104,8 @@ X-Callback-Url: https://<registered host>/provider/mtn_momo/callback
 `INVALID_CALLBACK_URL_HOST`. Settlement never depends on the callback arriving:
 MTN signs nothing and sends no shared secret, so `parse_callback` returns the
 reference (from `referenceId`, else `externalId`) and deliberately ignores the
-body's `status`. The worker's authenticated status query on the
+body's `status`, and the callback check added in v0.12.0 has nothing to check
+here: the adapter answers `NotChecked`. The worker's authenticated status query on the
 [poll ladder](/payments/reconciler) is what moves money.
 
 MTN's own documentation says it sends a callback **once**, has no retry
