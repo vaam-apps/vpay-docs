@@ -9,6 +9,9 @@ sources:
   - docs/flows/adapter-orange-money.md
   - docs/flows/payment-lifecycle.md
   - docs/flows/crash-safety.md
+  - docs/reference/rails.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
+  - docs/status/verification/2026-10-23-method-type-routing.md
 skills:
   - vpay-orange-money
   - vpay-provider-adapters
@@ -92,6 +95,14 @@ with `ProviderError::Config` before any call — the adapter will not invent one
 Where the value comes from is the core's decision: the merchant's own
 `return_url` on a direct confirm, or vpay's return page when a
 [hosted Checkout Session](/checkout/hosted) drives the charge.
+
+Since v0.12.0 `orange_money` serves the payment-method type `orange_wallet`,
+and so does `notchpay`, a push rail. A confirm by type is routed to one of the
+two (see [the merchant API](/api/#payment-method-types-and-routing)). With the
+default equal weights, the tie-break sends `orange_wallet` to `notchpay`, so
+this rail takes an `orange_wallet` payment only when it is pinned, re-weighted
+above Notch Pay, or the only eligible rail. A merchant naming the rail code
+`orange_money` gets this rail, as before.
 
 ## The three calls
 
@@ -240,8 +251,14 @@ confirm with Orange Cameroun" list:
   official Orange source says either way, and the third-party claims contradict
   each other. Nothing on this page assumes Orange retries.
 - **The `notif_token` comparison is not built.** `parse_callback` requires a
-  `notif_token` and fails closed without one, but the callback route discards it
-  rather than comparing it with the stored token.
+  `notif_token` and fails closed without one, but nothing compares it with the
+  token `webpayment` returned. Since v0.12.0 the port has the place for that
+  check (`verify_callback`, with the headers, the raw body and the charge
+  holding the stored token), and Orange's adapter deliberately keeps the
+  default, `NotChecked`: nobody has observed whether a real notification's
+  `notif_token` is the one `webpayment` returned, and enforcing an unconfirmed
+  equality would refuse every genuine Orange callback
+  ([RFC-0014](vpay:docs/rfc/0014-verifying-rail-callbacks.md)).
 - The production `{env}` path segment and host for Cameroon.
 - Whether `transactionstatus` stays queryable indefinitely.
 - The transfer product — which one, which endpoint, which body, which
@@ -261,7 +278,7 @@ Web Payment credentials for `dev`; nobody on the project held them on
 | ------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Token, `webpayment`, `transactionstatus` (`submit`, `query_status`) | <Status s="unproven" />  | Implemented; all conformance cases pass against WireMock; never called against Orange                                                                      |
 | `parse_callback`                                                    | <Status s="unproven" />  | Fails closed without `notif_token` and without `order_id`; only vpay's own tests have posted to it. Whether a real notification carries `order_id` is open |
-| `notif_token` comparison on the callback route                      | <Status s="not-built" /> | The route discards the received token                                                                                                                      |
+| `notif_token` comparison on the callback route                      | <Status s="not-built" /> | The port can carry it since v0.12.0; Orange's adapter checks nothing until a real notification shows the token matches                                     |
 | `refund`                                                            | <Status s="not-built" /> | `NotImplemented("orange_money::refund")`; merchants get a `501`                                                                                            |
 | Partial refunds                                                     | <Status s="not-built" /> | `supports_partial_refunds: false` by decision                                                                                                              |
 | Account-holder lookup                                               | <Status s="not-built" /> | `supports_account_holder_lookup: false`; Orange's route unconfirmed                                                                                        |

@@ -12,6 +12,7 @@ sources:
   - docs/flows/adapter-notchpay.md
   - docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md
   - docs/status/verification/2026-10-23-two-step-submit.md
+  - docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md
 skills:
   - vpay-reconciler
   - vpay-payments
@@ -194,7 +195,7 @@ Three more things about the rows it reads:
 
 Since v0.11.0
 ([ADR-0032](vpay:docs/adr/0032-a-rail-issued-reference-is-committed-before-the-prompt.md),
-whose status is still _Proposed_, pending the maintainer's acceptance). Notch
+which the maintainer accepted on 2026-10-23). Notch
 Pay addresses a payment by its own `trx.…` reference, which exists only in the
 answer to its first call, initialize; the call that prompts the payer, process,
 and the status read both take that reference alone, and nothing finds a payment
@@ -254,12 +255,27 @@ waits for Notch Pay's expiry and fails `payer_timeout`: one payer's wait, no
 money. Re-sending the prompt from a poll is refused, because a prompt minutes
 later reaches a payer who has left.
 
-All of this is proven against WireMock and a real Postgres, **never against
-Notch Pay**: six two-step cases in `worker_recovery.rs`, one per row, one for
-a charge never sent, and the fourth row reached a second way, by its resubmit as
-well as its poll; and two in `confirm_rails.rs`, which assert the order of the
-rows and that a failed prompt leaves the charge holding its `trx.…`. The
-sandbox payments of 2026-10-21 and -22 ran the one-call build.
+All of this is proven against WireMock and a real Postgres, **never by vpay
+against Notch Pay**: six two-step cases in `worker_recovery.rs`, one per row,
+one for a charge never sent, and the fourth row reached a second way, by its
+resubmit as well as its poll; and two in `confirm_rails.rs`, which assert the
+order of the rows and that a failed prompt leaves the charge holding its
+`trx.…`. The sandbox payments of 2026-10-21 and -22 ran the one-call build.
+
+Notch Pay's side of the split was measured on 2026-10-23, through vpay's probe
+rather than vpay, which cannot reach Notch Pay from the session that ran it
+([verification](vpay:docs/status/verification/2026-10-23-notchpay-sandbox-two-step-and-channels.md)):
+
+- A payment initialized and never processed read `pending` for at least an
+  hour. That is what vpay leaves at Notch Pay when it stops between `prepare`
+  and `submit`, and it stays open to whoever holds the public key for at least
+  that long. Its eventual expiry was not seen.
+- A process 300 s after the initialize was accepted and completed, as the
+  worker's resubmit of a `prepare`d charge expects.
+- A process 3600 s late was accepted (`202`), but whether it would complete is
+  not shown: the payment stalled in `processing`, as others in the same session
+  did.
+- The same reference sent again answered `409`, as the first row expects.
 
 ## Redirect rails (Orange Money): persist the token before redirect
 
@@ -357,7 +373,7 @@ dead-lettering.
 | ---------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Write-before-network ordering in confirm             | <Status s="built" />     | `redirect_confirm_commits_the_rails_material_before_it_answers`, `an_unreachable_rail_leaves_the_charge_where_recovery_expects_it`                                                                                                                                                               |
 | Recovery table read by the worker                    | <Status s="built" />     | `worker_recovery.rs`, 36 cases against real Postgres, none ignored                                                                                                                                                                                                                               |
-| Two-step submit on Notch Pay (ADR-0032)              | <Status s="partial" />   | Six cases in `worker_recovery.rs` and two in `confirm_rails.rs`, against WireMock's Notch Pay and a real Postgres; never against Notch Pay's sandbox; the ADR is _Proposed_                                                                                                                      |
+| Two-step submit on Notch Pay (ADR-0032)              | <Status s="partial" />   | Six cases in `worker_recovery.rs` and two in `confirm_rails.rs`, against WireMock's Notch Pay and a real Postgres; vpay has never run the split against Notch Pay's sandbox, whose answers to the same two calls were measured through the probe; the ADR is Accepted                            |
 | A declined submit fails the charge before its row    | <Status s="partial" />   | Same order in `vpay-api`'s confirm and the worker's resubmit (`a_decline_the_database_refuses_to_settle_leaves_the_attempt_unanswered`, `a_resubmit_the_rail_declines_fails_the_charge_and_is_recorded_as_answered`); proven against real Postgres, with the decline itself coming from WireMock |
 | Kill point 2 and mid-poll crash under real `SIGKILL` | <Status s="partial" />   | `worker_kill9.rs` — MTN only, rail is a WireMock container                                                                                                                                                                                                                                       |
 | Kill point 1 under a real signal                     | <Status s="not-built" /> | Only written, not caused: there is no network call at that instant for a signal to land during                                                                                                                                                                                                   |

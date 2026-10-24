@@ -14,6 +14,8 @@ sources:
   - config/application-live.yml
   - config/application-notchpay-sandbox.yml
   - docs/rfc/0013-vpay-registers-its-own-callbacks.md
+  - docs/rfc/0014-verifying-rail-callbacks.md
+  - docs/rfc/0008-payment-method-routing.md
 skills:
   - vpay-ops
 ---
@@ -91,11 +93,12 @@ stubs). `application-sandbox.yml` is the CLI's default profile.
 `notchpay` and Notch Pay's real sandbox, with `notchpay` as its only rail; it is
 what the [Notch Pay sandbox runbook](/operate/runbooks#test-notch-pay-against-its-sandbox)
 runs. It took six test-mode payments through Notch Pay's sandbox on 2026-10-21
-and -22. Since v0.11.0 it sets the rail's `callbacks.register` to `check`, so
-a worker started for the runbook lists the sandbox account's webhook endpoints
-but never creates one; registering is a deliberate step of the runbook (B4),
-which changes that line to `ensure`. None of the four is a production
-configuration.
+and -22. It sets the rail's `callbacks.register` to `check`, so a worker
+started for the runbook lists the sandbox account's webhook endpoints but never
+creates one; registering is a deliberate step of the runbook (B4), which
+changes that line to `ensure`. It configures no webhook signing secret, so
+vpay's signature check answers `NoSecret` under it. None of the four is a
+production configuration.
 
 ## How a configuration is resolved at boot
 
@@ -183,11 +186,11 @@ place outside an adapter crate that matches on a rail code — a recorded interi
 until the port grows a hook for it
 ([ADR-0012](vpay:docs/adr/0012-rail-configuration-requirements-in-config.md)):
 
-| Rail           | Required keys                                                                                                                                                                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mtn_momo`     | `settings.target_environment`, `settings.api_user`, `credentials.subscription_key`, `credentials.api_key`                                                                                                                                                      |
-| `orange_money` | `credentials.merchant_key`, `credentials.client_id`, `credentials.client_secret`                                                                                                                                                                               |
-| `notchpay`     | `settings.channel` (exactly `cm.mobile`), `credentials.public_key`, `credentials.private_key`, currency `XAF`; the keys' test marker (`test.` or `test_`) must agree with `deployment.livemode`; in livemode only, `settings.accept_public_key_exposure: true` |
+| Rail           | Required keys                                                                                                                                                                                                                                                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mtn_momo`     | `settings.target_environment`, `settings.api_user`, `credentials.subscription_key`, `credentials.api_key`                                                                                                                                                                                                                                      |
+| `orange_money` | `credentials.merchant_key`, `credentials.client_id`, `credentials.client_secret`                                                                                                                                                                                                                                                               |
+| `notchpay`     | `settings.channel` (exactly `cm.mobile`; a charge routed by the payer's network is sent `cm.mtn` or `cm.orange` instead), `credentials.public_key`, `credentials.private_key`, currency `XAF`; the keys' test marker (`test.` or `test_`) must agree with `deployment.livemode`; in livemode only, `settings.accept_public_key_exposure: true` |
 
 The `notchpay` block ships **commented out** in `config/application.yml`.
 Because boot checks every configured rail, enabled or not, uncommenting it makes
@@ -195,27 +198,71 @@ Because boot checks every configured rail, enabled or not, uncommenting it makes
 of the file, and every boot then logs the rail's public-key exposure at `WARN`.
 Read [Notch Pay](/rails/notchpay#the-production-risk) before you uncomment it.
 
-### Callback registration
+### Callbacks: registration and signatures
 
-Since v0.11.0 a rail can carry an optional `callbacks:` block:
+A rail can carry an optional `callbacks:` block, and a rail whose adapter
+checks signatures takes a signing secret among its credentials:
 
 ```yaml
 providers:
   - code: notchpay
     # …
-    callbacks: # optional; absent means `register: ensure`
-      register: ensure # or `check` (list, never create) or `off` (never ask)
+    credentials:
+      # …
+      callback_signing_secret: ${NOTCHPAY_HASH_KEY} # the endpoint's Hash Key
+      # callback_signing_secret_previous: ${NOTCHPAY_HASH_KEY_PREVIOUS} # during a rotation only
+    callbacks: # optional
+      register: off # or `check` (list, never create) or `ensure` (create vpay's endpoint)
+      # verify: off # livemode without a signing secret only
 ```
 
-It is read by the worker's `ensure:callbacks` job, at every worker start and
-hourly, and by `vpay-server callbacks ensure`, and only for an **enabled** rail
-whose adapter keeps its callback URL registered with the account — today
-`notchpay` alone. With `ensure` vpay lists the account's webhook endpoints and
-creates its own when it is missing; it never modifies or deletes one. A
-misspelt key inside the block is refused, not read as `ensure`. This has been
-proven against a WireMock Notch Pay only, never against a real account
-([Notch Pay](/rails/notchpay#configuration),
-[RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)).
+**`register`** is read by the worker's `ensure_callbacks` job, at every worker
+start and hourly, and by `vpay-server callbacks ensure`, and only for an
+**enabled** rail whose adapter keeps its callback URL registered with the
+account — today `notchpay` alone. Unset (no block, or `callbacks: {}`), it is
+the rail's own default, which its adapter declares: `ensure`, except
+`notchpay`, which is `off` since v0.12.0, so vpay asks a Notch Pay account
+nothing unless told to ([Notch Pay](/rails/notchpay#callbacks)). With `ensure`
+vpay lists the account's webhook endpoints and creates its own when it is
+missing; it never modifies or deletes one. A misspelt key inside the block is
+refused, not ignored. The pass has been proven against a WireMock Notch Pay
+only, never against a real account
+([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)).
+
+**`credentials.callback_signing_secret`**, and `callback_signing_secret_previous`
+while a rotation is in flight, is the secret a rail that signs its callbacks is
+checked against; for Notch Pay it is the endpoint's Hash Key
+([RFC-0014](vpay:docs/rfc/0014-verifying-rail-callbacks.md)). It is a
+credential like any other: livemode demands a `${VAR}`, `Debug` redacts it, and
+no message prints it. **`verify`** is `on` by default and is an
+acknowledgement, not a switch: a configured secret is checked whatever it says.
+`verify: off` is what lets a livemode deployment boot a signing rail with no
+secret, and the server warns at every boot that says it. The boot rules are in
+the table below; the check itself is stub-proven and has never met a webhook
+Notch Pay sent ([Notch Pay](/rails/notchpay#webhook-signatures)).
+
+### Routing weights
+
+An optional `routing:` block weighs each rail, per payment-method type, for the
+router that picks a rail when the payer chose a network
+([the provider port](/rails/provider-port),
+[RFC-0008](vpay:docs/rfc/0008-payment-method-routing.md)):
+
+```yaml
+routing:
+  weights:
+    - rail: notchpay
+      method_type: mtn_wallet # optional; without it the weight is the rail's for every type
+      weight: 300 # 0 ..= 1000
+```
+
+The most specific entry wins: a rail and a type, then the rail alone, then
+`100`. With no block every rail weighs `100`, and the lower rail code breaks a
+tie. The weight is the only component of the score today, so the formula is
+called `provisional-1`. The estimated fee is the next component, and is not
+built; the completion rate is reported for an operator to turn into a weight
+here by hand, never scored automatically. A weight is not a switch: `0` ranks a
+rail last, never off, and `enabled: false` is how a rail is taken out.
 
 ::: warning The Disbursements keys are defined, not real
 The three `MTN_DISBURSEMENT_*` variables feed MTN refunds. They are deliberately
@@ -226,20 +273,27 @@ are stubs aimed at WireMock. See [MTN MoMo](/rails/mtn-momo).
 
 ## Rules that refuse to boot
 
-A selection of what `Config::validate_all` enforces:
+A selection of what boot refuses, most of it in `Config::validate_all` and the
+rest at boot against the linked adapters. Each is exit `78`:
 
-| Rule                                                                                               | Why                                                                                           |
-| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Every merchant registration has a unique `merchant_id`                                             | It is the `/v1` tenancy boundary, and no foreign key backs it                                 |
-| Currency exponents match the canonical table                                                       | A 100x amount bug is otherwise silent ([Money](/payments/money))                              |
-| `livemode` ⇒ every host is `https://`                                                              |                                                                                               |
-| `livemode` ⇒ no host labelled `wiremock`, `stub`, `mock` or `localhost`                            | What makes "the code cannot tell a stub from a real rail" safe                                |
-| `livemode` ⇒ secrets are written as `${VAR}`, never literals                                       | Checked against the file's _text_, before resolution                                          |
-| `checkout.public_base_url` is a well-formed origin, `https://` under `livemode`                    | Every payer link is built on it                                                               |
-| `checkout_origins` entries are canonical origins, no duplicates across merchants                   | They become `frame-ancestors`; a non-canonical spelling would be dropped silently             |
-| `--worker-concurrency` ≤ 5 (worker only)                                                           | Half the 10-connection pool; see [Crash safety](/payments/crash-safety)                       |
-| No `callbacks:` block on a rail told its callback URL on every submit (`mtn_momo`, `orange_money`) | The block would do nothing there, and a setting that does nothing is one somebody believes in |
-| A linked adapter that registers its callback URL must declare that it calls back                   | A registered endpoint that is never called is incoherent; refused at boot, exit 78            |
+| Rule                                                                                                 | Why                                                                                           |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Every merchant registration has a unique `merchant_id`                                               | It is the `/v1` tenancy boundary, and no foreign key backs it                                 |
+| Currency exponents match the canonical table                                                         | A 100x amount bug is otherwise silent ([Money](/payments/money))                              |
+| `livemode` ⇒ every host is `https://`                                                                |                                                                                               |
+| `livemode` ⇒ no host labelled `wiremock`, `stub`, `mock` or `localhost`                              | What makes "the code cannot tell a stub from a real rail" safe                                |
+| `livemode` ⇒ secrets are written as `${VAR}`, never literals                                         | Checked against the file's _text_, before resolution                                          |
+| `checkout.public_base_url` is a well-formed origin, `https://` under `livemode`                      | Every payer link is built on it                                                               |
+| `checkout_origins` entries are canonical origins, no duplicates across merchants                     | They become `frame-ancestors`; a non-canonical spelling would be dropped silently             |
+| `--worker-concurrency` ≤ 5 (worker only)                                                             | Half the 10-connection pool; see [Crash safety](/payments/crash-safety)                       |
+| No `callbacks:` block on a rail told its callback URL on every submit (`mtn_momo`, `orange_money`)   | The block would do nothing there, and a setting that does nothing is one somebody believes in |
+| A linked adapter that registers its callback URL must declare that it calls back                     | A registered endpoint that is never called is incoherent; refused at boot, exit 78            |
+| A linked adapter that checks callbacks must declare that it calls back                               | A check on a rail that never calls back would demand a secret nothing reads                   |
+| `livemode` and a rail that checks signatures ⇒ `callback_signing_secret`, or `callbacks.verify: off` | Otherwise its callbacks would go unchecked in production; outside livemode it is a `WARN`     |
+| No signing setting on a rail that checks none, and never `verify: off` beside a secret               | A setting that does nothing is one somebody believes in                                       |
+| No signing secret with surrounding whitespace, and no previous secret without a current one          | A trailing newline would become part of the key, and every genuine callback would be refused  |
+| `routing.weights`: a configured rail, a known method type, a weight up to 1000, no duplicates        | Each a named error in `validate_all`                                                          |
+| `routing.weights`: a type the rail's adapter serves; every enabled rail serves at least one type     | Checked at boot against the linked adapter                                                    |
 
 `livemode` is a single boolean under `deployment:`. Every file in the repository
 sets it `false`, so none of them exercises the livemode rules outside tests.
@@ -274,16 +328,18 @@ deployment has no supported way to supply them yet. See
 
 ## Status in this release
 
-| Part                                                       | Status                   | Evidence                                                                                                          |
-| ---------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| CLI / env layer                                            | <Status s="built" />     | Flag parsing, env resolution and precedence tested in `vpay-config`                                               |
-| YAML load, overlay, `${VAR}` resolution, validation        | <Status s="built" />     | `Config::load` wired into both modes; exit 78 proven by subprocess tests                                          |
-| Reconcile into `currencies` / `providers`                  | <Status s="built" />     | Advisory-locked, one transaction; proven against real Postgres                                                    |
-| Livemode guard rules                                       | <Status s="partial" />   | Implemented and unit-tested; no livemode deployment has ever booted                                               |
-| Config hash (detect replicas on different files)           | <Status s="not-built" /> | "Nothing records or compares one"                                                                                 |
-| `providers[].callbacks.register` and its two boot refusals | <Status s="partial" />   | Parsed, defaulted and refused in unit and integration tests; the pass it drives has met a WireMock Notch Pay only |
-| Hot reload                                                 | <Status s="not-built" /> | By design: a config change is a redeploy                                                                          |
-| Checkout-page files in Kubernetes                          | <Status s="not-built" /> | The chart templates no ConfigMap for them                                                                         |
+| Part                                                       | Status                   | Evidence                                                                                                                             |
+| ---------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| CLI / env layer                                            | <Status s="built" />     | Flag parsing, env resolution and precedence tested in `vpay-config`                                                                  |
+| YAML load, overlay, `${VAR}` resolution, validation        | <Status s="built" />     | `Config::load` wired into both modes; exit 78 proven by subprocess tests                                                             |
+| Reconcile into `currencies` / `providers`                  | <Status s="built" />     | Advisory-locked, one transaction; proven against real Postgres                                                                       |
+| Livemode guard rules                                       | <Status s="partial" />   | Implemented and unit-tested; no livemode deployment has ever booted                                                                  |
+| Config hash (detect replicas on different files)           | <Status s="not-built" /> | "Nothing records or compares one"                                                                                                    |
+| `providers[].callbacks.register` and its two boot refusals | <Status s="partial" />   | Parsed, defaulted per adapter and refused in unit and integration tests; the pass it drives has met a WireMock Notch Pay only        |
+| Callback signing settings and their six boot refusals      | <Status s="partial" />   | Each refusal tested in `boot.rs` in both modes and mutation-checked; the check they configure has never met a webhook Notch Pay sent |
+| `routing.weights` and its six refusals                     | <Status s="partial" />   | Each refusal tested and mutation-checked; the weight is the score's only component, and the fee is not built                         |
+| Hot reload                                                 | <Status s="not-built" /> | By design: a config change is a redeploy                                                                                             |
+| Checkout-page files in Kubernetes                          | <Status s="not-built" /> | The chart templates no ConfigMap for them                                                                                            |
 
 The full record, including every test name, is the Status section of
 [docs/flows/configuration.md](vpay:docs/flows/configuration.md#status).

@@ -19,6 +19,7 @@ sources:
   - docs/status/gates.md
   - docs/runbooks/callback-endpoints.md
   - deploy/helm/vpay/ci/prometheusrule.test.yaml
+  - deploy/helm/vpay/values.yaml
 skills:
   - vpay-ops
   - vpay-tooling
@@ -178,6 +179,16 @@ The signing key is deliberately a file, never an environment value, and only the
 server mounts it — the worker issues no tokens.
 [Configuration](/operate/configuration) explains the `${VAR}` rules.
 
+**A Notch Pay overlay adds three keys to the rails Secret**: the public and
+private keys and, since v0.12.0, the webhook endpoint's Hash Key
+(`NOTCHPAY_HASH_KEY`, read as `credentials.callback_signing_secret`). Add each
+to the Secret before rolling an overlay that references it, since an
+unresolved placeholder is exit 78. A livemode deployment without the Hash Key
+refuses to boot unless the overlay says `callbacks: { verify: off }`. Create
+the value without a trailing newline (`--from-literal` or `printf %s`, not
+`echo` into a file): a value with surrounding whitespace is refused with exit
+78 too ([Notch Pay](/rails/notchpay#webhook-signatures)).
+
 ## Boot, and migrations
 
 ```mermaid
@@ -227,9 +238,19 @@ threshold is proposed, not measured.
 The `PrometheusRule` carries six alerts. The sixth, new in v0.11.0, is
 `VpayCallbackEndpointUnconfirmed`: it fires when, for
 `metrics.prometheusRule.callbackEndpointWindow` (`3h`, proposed), no pass of the
-worker's `ensure:callbacks` job confirmed vpay's callback endpoint on a rail,
+worker's `ensure_callbacks` job confirmed vpay's callback endpoint on a rail,
 read from `vpay_callback_endpoint_checks_total{provider,state}`, the fourteenth
-metric ([callback endpoints runbook](/operate/runbooks#callback-endpoints)).
+metric ([callback endpoints runbook](/operate/runbooks#callback-endpoints)). It
+cannot fire for a rail whose `callbacks.register` is `off`, which is Notch
+Pay's default since v0.12.0.
+
+vpay emits fifteen metric names. The fifteenth, new in v0.12.0, is
+`vpay_provider_callbacks_total{provider,verdict}`: one count per rail callback
+that names a charge, with the rail's check's verdict (`verified`,
+`verified_previous`, `not_checked`, `no_secret`, `invalid`, `unavailable`). A
+steady `invalid` with no `verified` beside it is the deployment's own signing
+secret gone stale, and `verified_previous` stops increasing once a rotation can
+end. No alert reads it yet.
 Since v0.11.0 `just test-alert-rules` renders all six and runs
 `promtool test rules` against a firing and a silent case for each, in CI's
 chart job. That proves each expression fires on the made-up series it is

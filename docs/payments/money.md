@@ -77,7 +77,7 @@ and never settles the charge. Notch Pay's sandbox read one test payment of
 230 XAF as `complete` with a short `amounts.total`, the adapter refused each of
 those reads, and the charge was still `pending` 15 minutes later
 ([`mapping.rs`](vpay:backends/crates/vpay-adapter-notchpay/src/mapping.rs)).
-Since <Release /> the refusal is `NeedsReconciliation` rather than `Malformed`:
+Since v0.11.0 the refusal is `NeedsReconciliation` rather than `Malformed`:
 an amount does not change on a second read, so the worker makes the charge
 `unresolved` for an operator on the first such read instead of retrying it for
 24 hours ([reconciler](/payments/reconciler)).
