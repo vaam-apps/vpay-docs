@@ -230,6 +230,13 @@ What a merchant should know before relying on it:
   and proven in vpay against a stub of it.
 - **The decision is not on the API.** The chosen rail, the type and the
   ranking are recorded in vpay's database, on no `/v1` object.
+- **A routed charge is refunded under its rail's code**, which `/v1` does not
+  show. `POST /v1/refunds` wants `destination[mtn_momo][msisdn]`, never
+  `destination[mtn_wallet][…]` (a `400` naming `destination`), so refunding a
+  routed charge that landed on `mtn_momo` or `orange_money` means knowing which
+  rail won. vpay records this as a gap and has not decided whether the route
+  should also accept the method type or `/v1` should name the rail
+  ([verification](vpay:docs/status/verification/2026-10-23-method-type-routing.md)).
 - **Neither SDK can send a confirm by type or a pin** yet
   ([SDK parity](vpay:docs/sdks/parity.md)). The checkout session's browser
   answer offers a type as one entry, flowing as its first-ranked rail; the
