@@ -247,15 +247,15 @@ must never invent one.
 
 ## Status in this release
 
-| Part                           | Status                   | Evidence                                                                                                                                |
-| ------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Taking a real payment          | <Status s="not-built" /> | `docs/status.md` records no real payment: no real payer prompted, no money moved                                                        |
-| End to end against stub rails  | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green                                                            |
-| MTN sandbox charge             | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above                                                   |
-| Notch Pay sandbox charge       | <Status s="partial" />   | Six test-mode payments on 2026-10-21 and -22: two succeeded, three failed with the mapped code, one read as paid short stayed `pending` |
-| Routing by payment-method type | <Status s="partial" />   | Built and proven against WireMock and a real Postgres; the score has one provisional component; the SDKs cannot confirm by type         |
-| Notch Pay callback signature   | <Status s="partial" />   | Checked against stub deliveries only; no webhook from Notch Pay has ever been delivered                                                 |
-| Declared unimplemented paths   | <Status s="partial" />   | Two tokens, `orange_money::refund` and `notchpay::refund`, gate-checked in both directions                                              |
+| Part                           | Status                   | Evidence                                                                                                                                                                                                   |
+| ------------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Taking a real payment          | <Status s="not-built" /> | `docs/status.md` records no real payment: no real payer prompted, no money moved                                                                                                                           |
+| End to end against stub rails  | <Status s="partial" />   | `just demo` settles six payments on both rails, and `just test-e2e` is green                                                                                                                               |
+| MTN sandbox charge             | <Status s="partial" />   | Over seven payments succeeded on 2026-09-15; the first recorded intent is shown above                                                                                                                      |
+| Notch Pay sandbox charge       | <Status s="partial" />   | Six test-mode payments on 2026-10-21 and -22: two succeeded, three failed with the mapped code, one read as paid short stayed `pending`                                                                    |
+| Routing by payment-method type | <Status s="partial" />   | Built and proven against WireMock and a real Postgres; the score has one provisional component; the SDKs cannot confirm by type; a routed charge's refund needs its rail's code, which `/v1` does not show |
+| Notch Pay callback signature   | <Status s="partial" />   | Checked against stub deliveries only; no webhook from Notch Pay has ever been delivered                                                                                                                    |
+| Declared unimplemented paths   | <Status s="partial" />   | Two tokens, `orange_money::refund` and `notchpay::refund`, gate-checked in both directions                                                                                                                 |
 
 The full record is in [`docs/status.md`](vpay:docs/status.md). Its history,
 verbatim and dated, is in [`docs/status/`](vpay:docs/status/README.md).

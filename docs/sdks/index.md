@@ -10,6 +10,7 @@ sources:
   - docs/sdks/parity.md
   - docs/status/merchant-sdks.md
   - sdks/nodejs/src/types.ts
+  - sdks/rust/src/resources.rs
   - sdks/rust/src/model.rs
   - docs/adr/0015-sdk-parity.md
   - docs/flows/merchant-auth.md
@@ -168,6 +169,12 @@ older one refuses it as an unknown rail. See
 [Payment lifecycle](/payments/lifecycle#which-rail-a-confirm-reaches) for how
 the rail is picked, and
 [merchant-sdks.md](vpay:docs/status/merchant-sdks.md) for the dated gap.
+
+A refund's `destination` names the rail with the same `PaymentMethodType`, so
+`mtn_wallet` there type-checks in both SDKs, and the server refuses it with a
+`400` naming `destination`: pass the code of the rail the charge was made on.
+For a charge the server routed, no `/v1` object says which rail that is, a gap
+vpay records ([the merchant API](/api/#payment-method-types-and-routing)).
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:
