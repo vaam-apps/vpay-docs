@@ -179,8 +179,9 @@ naming `destination`. That is how to refund a routed charge without reading
 which rail it went to. Since v0.14.0 the intent names that rail too, as
 `payment_method_details.rail`, so its code works as well
 ([the merchant API](/api/#payment-method-types-and-routing)). Both SDKs' doc
-comments describe the type since v0.13.0, and no signature changed; their aside
-that no `/v1` object names the rail was not updated in v0.14.0 and is stale.
+comments describe the type since v0.13.0, and no signature changed. Their
+aside that no `/v1` object names the rail was stale in v0.14.0 and is corrected
+in v0.14.1: they now point at `payment_method_details.rail` too.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:
