@@ -224,7 +224,12 @@ start and hourly and creates vpay's when it is missing, and with `check` it
 only lists and reports
 ([RFC-0013](vpay:docs/rfc/0013-vpay-registers-its-own-callbacks.md)). It never
 modifies or deletes an endpoint, and it is proven against a WireMock Notch Pay
-only. **Since v0.12.0 Notch Pay's default is `off`**: with `register` unset,
+only. A rail is checked under a database lock, so two passes never check it at
+once. Since v0.14.1 a check the rail refused or did not answer releases that
+lock before it returns; before, a pass started straight afterwards could find
+it still held, report the rail `locked` and leave it unchecked until the next
+pass an hour later
+([verification](vpay:docs/status/verification/2026-10-25-callback-lock-release.md)). **Since v0.12.0 Notch Pay's default is `off`**: with `register` unset,
 vpay asks a Notch Pay account nothing, and the operator registers vpay's URL in
 Notch Pay's dashboard ([Notch Pay](/rails/notchpay#callbacks)). In the sandbox
 an endpoint created through Notch Pay's API delivered nothing, and one

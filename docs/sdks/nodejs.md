@@ -44,7 +44,7 @@ pnpm add @vaam-apps/vpay-sdk
 `release.yml`'s `publish-node-sdk` job publishes the package on every `v*` tag;
 the first version on the registry was `0.2.1`, and the package's
 [README](vpay:sdks/nodejs/README.md) records `0.2.1` through `0.4.1` listed on
-2026-09-23. The manifest in <Release /> is version `0.14.0`. Being published
+2026-09-23. The manifest in <Release /> is version `0.14.1`. Being published
 proves nothing about what the server it talks to serves — see
 [What its tests talk to](#what-its-tests-talk-to).
 :::
