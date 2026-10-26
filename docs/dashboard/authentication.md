@@ -17,6 +17,7 @@ sources:
   - docs/adr/0019-credential-model.md
   - docs/adr/0030-staff-sign-in-federates-to-an-oidc-provider.md
   - docs/flows/dashboard-auth/sso.md
+  - docs/status/verification/2026-10-26-argon2-0-6.md
 skills:
   - vpay-dashboard
 ---
@@ -62,6 +63,14 @@ are declared and **three are implemented**: the argon2id password, RFC 6238
 TOTP and, since vpay 0.8.0, `oidc`, a federated identity keyed on
 `(issuer, subject)` and never on email. `hotp`, `magic_link`, `email_otp`,
 `phone_otp` and `webauthn` are reachable by no code path.
+
+The password is hashed with argon2id at OWASP's first parameter set (19 MiB,
+two passes, one lane), with a deployment pepper as argon2's secret input. Since
+<Release /> the `argon2` crate is 0.6; it was 0.5.3 before. Nothing about a
+stored hash changed and nothing was re-hashed: a hash 0.5.3 wrote still
+verifies, and a unit test pins one. A hash 0.6 writes also verifies under
+0.5.3, so rolling back to the previous release locks nobody out
+([verification](vpay:docs/status/verification/2026-10-26-argon2-0-6.md)).
 
 ## Signing in
 

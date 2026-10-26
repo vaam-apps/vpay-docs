@@ -190,13 +190,13 @@ vpay <Release /> settles a `pending` refund, and no rail has ever refunded anyth
 ```mermaid
 flowchart TB
     subgraph BE["backends/"]
-        CR["crates: vpay-core, -config, -db, -ledger,<br/>-provider, adapters, -notchpay, -api, -worker, -testkit"]
+        CR["crates: vpay-core, -config, -db, -ledger,<br/>-provider, adapters, -notchpay, -api, -worker,<br/>-testkit, -wire"]
         AP["apps/vpay-server<br/>one musl binary, scratch image"]
         TS["tests: integration, conformance,<br/>webhook-receiver"]
     end
     subgraph FE["frontends/"]
         FA["apps: checkout, dashboard"]
-        FP["packages: @vpay/tokens,<br/>@vpay/api-client, @vpay/config"]
+        FP["packages: @vpay/tokens, @vpay/api-client,<br/>@vpay/config, @vpay/dash-client"]
         FT["tests/e2e (Cypress)"]
     end
     subgraph SD["sdks/"]

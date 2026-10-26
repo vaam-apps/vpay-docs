@@ -78,7 +78,7 @@ flowchart TD
   P -->|"cut a release, verify a signature, pin a digest"| RL["release"]
   P -->|"helm upgrade or rollback"| DR
   P -->|"rotate the OAuth signing key"| SK["rotate-signing-key"]
-  P -->|"rotate an MTN or Orange credential, revoke a merchant"| RC["rotate-rail-credentials"]
+  P -->|"rotate an MTN, Orange or Notch Pay credential, revoke a merchant"| RC["rotate-rail-credentials"]
   P -->|"rotate MERCHANT_WEBHOOK_SECRET"| WH
   L -->|"the whole stack on WireMock rails"| DM["demo"]
   L -->|"integrating the checkout page"| CO["checkout"]
@@ -319,11 +319,15 @@ been performed on a deployment.
 
 ### Rotate rail credentials
 
-**When:** rotating an MTN or Orange credential, or revoking a merchant client.
+**When:** rotating an MTN, Orange or Notch Pay credential, or revoking a
+merchant client.
 
 - A rail credential is a `${VAR}` from one Secret: replace the whole Secret (a
   dropped key is an unresolved placeholder, exit 78) and restart **both**
   workloads.
+- Notch Pay's `public_key` and `private_key` are mandatory only once its
+  commented-out block is enabled. Treat `public_key` as a secret too: it can
+  read and initiate payments on the account.
 - A bad credential shows up as `error_kind = 'misconfigured'` from the moment
   you restarted — it reads like a rail outage.
 - vpay holds no merchant secret. Revoking a merchant is an insert into

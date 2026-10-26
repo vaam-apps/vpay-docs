@@ -15,6 +15,7 @@ sources:
   - docs/adr/0022-surface-isolation-and-independent-scaling.md
   - docs/status/verification/2026-10-21-dashboard-md3e.md
   - docs/status/verification/2026-10-21-dashboard-hydration.md
+  - docs/status/verification/2026-10-26-dashboard-cratestack-refine.md
   - frontends/apps/dashboard
   - docs/flows/webhooks.md
 skills:
@@ -89,18 +90,18 @@ flowchart LR
 ```
 
 - **Pages read on the server.** Each page is a Server Component that calls
-  `requireStaff()` and reads `/dash/v1` itself. The payments list and the
-  payment detail then hand what they read to Refine's hooks as initial data; the
-  Overview and the other four lists render it directly and use no client data
-  layer. A browser-side read was tried and withdrawn after it broke the
-  end-to-end suite.
+  `requireStaff()` and reads `/dash/v1` itself. The payments list, the payment
+  detail and, since <Release />, the other four lists then hand what they read
+  to Refine's hooks as initial data; the Overview renders its counts directly
+  and uses no client data layer. A browser-side read was tried and withdrawn
+  after it broke the end-to-end suite.
 - **The BFF** (`/api/dash/*`) is a same-origin, `GET`-only proxy that
   authenticates on the same cookie. A request with no cookie never reaches vpay;
   a request the dashboard did not issue is refused by an `Origin` /
   `Sec-Fetch-Site` check; the bearer token appears in no response header or
   body; no caller-supplied merchant id, audience or scope is forwarded. Every
   other method gets a `405`. It has six handlers — one per list plus the
-  payment detail — and Refine's data provider is wired to it, but vpay records
+  payment detail — and Refine's two data providers are wired to it, but vpay records
   that no page issues a read through it: every read is made on the server, and
   Refine is configured to treat a server-seeded query as the answer and not read
   it again. A twelve-step click-through, run against a fake of `/dash/v1` kept
@@ -109,7 +110,13 @@ flowchart LR
 - **The payments list** is served by two REST routes and is cursor-paged, like
   the merchant API. **The other four lists** are CrateStack procedures under
   `/dash/v1/$procs/`, which the dashboard's server calls with `POST` on the
-  browser's behalf; they are offset-paged, twenty to a page. Refunds,
+  browser's behalf; they are offset-paged, twenty to a page. Since <Release />
+  the server makes those calls through `@vpay/dash-client`, a TypeScript client
+  generated from `schemas/vpay.cstack`, with `@cratestack/refine` as their
+  Refine data provider. `just check-schema` fails if the committed client is
+  stale, and a filter key a procedure does not declare is refused before
+  anything is sent. The payments list stays on its hand-written provider,
+  because it is cursor-paged. Refunds,
   deliveries and checkouts pass one filter through to their procedure (a status,
   or a state for deliveries); customers take none. **The Overview** reads those
   four procedures and `searchPaymentIntents` for its counts.
@@ -267,18 +274,18 @@ gateway at all is an open maintainer decision. See
 
 ## Status in this release
 
-| Part                                                      | Status                   | Evidence                                                                                                                                                  |
-| --------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/dash/v1` boundary, the two payment reads, boot refusals | <Status s="built" />     | `backends/tests/integration/tests/dashboard_read_surface.rs` over a booted server and real Postgres                                                       |
-| Sign-in and the pages, in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` signs in through the real OP against the compose stack, lands on `/overview` and reads payments                                         |
-| Single sign-on routes                                     | <Status s="partial" />   | Built and covered by vitest against stubbed `fetch`; no browser has run them                                                                              |
-| Overview, and navigation without reloads                  | <Status s="partial" />   | Vitest against a stubbed `fetch`, and a headless browser against a fake of `/dash/v1`; no Cypress case reads a count, no real vpay behind any measurement |
-| Refunds, deliveries, customers, checkouts lists           | <Status s="partial" />   | Read-only lists over CrateStack procedures; status or state chips on three, none on customers; no Cypress case opens them                                 |
-| The BFF read surface                                      | <Status s="partial" />   | Six handlers, reviewed and browser-tested; pages render from server-side reads, not through it                                                            |
-| Writes and `audit_log`                                    | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                                                                          |
-| Slices 4–6                                                | <Status s="not-built" /> | Not started                                                                                                                                               |
-| Real data on screen                                       | <Status s="partial" />   | Every payment it has shown settled against a WireMock rail                                                                                                |
-| Running in Kubernetes                                     | <Status s="not-built" /> | Chart templates exist; no pod is on record                                                                                                                |
+| Part                                                      | Status                   | Evidence                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/dash/v1` boundary, the two payment reads, boot refusals | <Status s="built" />     | `backends/tests/integration/tests/dashboard_read_surface.rs` over a booted server and real Postgres                                                                                                                                                                                                                                                                                                           |
+| Sign-in and the pages, in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` signs in through the real OP against the compose stack, lands on `/overview` and reads payments                                                                                                                                                                                                                                                                                             |
+| Single sign-on routes                                     | <Status s="partial" />   | Built and covered by vitest against stubbed `fetch`; no browser has run them                                                                                                                                                                                                                                                                                                                                  |
+| Overview, and navigation without reloads                  | <Status s="partial" />   | Vitest against a stubbed `fetch`, and a headless browser against a fake of `/dash/v1`. Since <Release /> a Cypress case opens the Overview against the compose stack and asserts that no read was refused; none asserts a count's value                                                                                                                                                                       |
+| Refunds, deliveries, customers, checkouts lists           | <Status s="partial" />   | Read-only lists over CrateStack procedures, read through a generated client and `@cratestack/refine` since <Release />; status or state chips on three, none on customers. A Cypress case opens each against the compose stack, with WireMock rails, and asserts rows or the empty-state sentence and no refused read; the stack writes no refund and no customer, so those two showed only their empty state |
+| The BFF read surface                                      | <Status s="partial" />   | Six handlers, reviewed and browser-tested; pages render from server-side reads, not through it                                                                                                                                                                                                                                                                                                                |
+| Writes and `audit_log`                                    | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                                                                                                                                                                                                                                                                                                                              |
+| Slices 4–6                                                | <Status s="not-built" /> | Not started                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Real data on screen                                       | <Status s="partial" />   | Every payment it has shown settled against a WireMock rail                                                                                                                                                                                                                                                                                                                                                    |
+| Running in Kubernetes                                     | <Status s="not-built" /> | Chart templates exist; no pod is on record                                                                                                                                                                                                                                                                                                                                                                    |
 
 The theme script has to run first in `<body>`. In v0.10.0's dashboard image it
 sat in `<head>`, where it failed React hydration in the document Cypress serves

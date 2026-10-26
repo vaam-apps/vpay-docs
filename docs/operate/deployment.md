@@ -52,8 +52,8 @@ Three images, published to `ghcr.io/vaam-apps/vpay-{server,dashboard,checkout}`:
 | Image            | Base             | Contents                                                                                                 |
 | ---------------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
 | `vpay-server`    | `scratch`        | One static musl binary with mimalloc, plus `config/` baked at `/config`. Runs **both** backend workloads |
-| `vpay-dashboard` | `node:22-alpine` | The staff dashboard's Next.js standalone server                                                          |
-| `vpay-checkout`  | `node:22-alpine` | vpay's own hosted/embedded payment page                                                                  |
+| `vpay-dashboard` | `node:24-alpine` | The staff dashboard's Next.js standalone server                                                          |
+| `vpay-checkout`  | `node:24-alpine` | vpay's own hosted/embedded payment page                                                                  |
 
 The backend image has no shell, no package manager and no writable path
 ([ADR-0004](vpay:docs/adr/0004-musl-mimalloc.md)). Everything is observed from
