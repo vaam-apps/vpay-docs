@@ -71,7 +71,7 @@ flowchart LR
 | Written for     | a contributor who needs every detail | a person evaluating, integrating or operating vpay | an agent making a change **now**                            |
 | Judged on       | is it complete and dated?            | is it clear, and true of the release?              | would an agent that read only this get it right first time? |
 | Pinned to       | the commit it lives in               | a vpay **release tag**, in `vpay.lock.json`        | a vpay **commit**, stamped in every `SKILL.md`              |
-| Drift caught by | vpay's own fifteen gates             | `verify-parity`, on every vpay release             | `verify-coverage`, daily against vpay's `master`            |
+| Drift caught by | vpay's own sixteen gates             | `verify-parity`, on every vpay release             | `verify-coverage`, daily against vpay's `master`            |
 
 vpay's own [AGENTS.md](vpay:AGENTS.md) names all three tiers in its list of
 which document answers what: an ADR, a flow doc, a runbook, a skill for an

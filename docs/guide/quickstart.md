@@ -42,8 +42,10 @@ is no evidence for live use.
 - `just`, `jq`, `curl` and `openssl` on your `PATH`. Every recipe checks for the
   tools it needs and names any that are missing.
 - `pnpm` only if you work on the web packages. `just demo` builds every image it
-  needs inside Docker. The Node baseline is `.nvmrc` (`22.23.2`), and `.npmrc`
-  sets `engine-strict=true`, so `pnpm install` **fails** on an older Node.
+  needs inside Docker. The Node baseline is `.nvmrc` (`24.21.0`), and `.npmrc`
+  sets `engine-strict=true`, so `pnpm install` **fails** on an older Node. It
+  was `22.23.2` until <Release />, which added a dashboard dependency that
+  needs Node 24.
 
 ## Install and start the dev dependencies
 
