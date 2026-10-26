@@ -60,7 +60,7 @@ The fast path is a `vpay-release` dispatch from vpay's own
 tag lands. It merged on 2026-09-23
 ([vaam-apps/vpay#246](https://github.com/vaam-apps/vpay/pull/246)), and this
 repository's `release-parity` runs show a `vpay-release` dispatch arriving on
-each vpay tag date from v0.5.0 to v0.14.1. The 3-hourly poll stays as the
+each vpay tag date from v0.5.0 to v0.14.2. The 3-hourly poll stays as the
 fallback.
 
 ## What the check refuses
