@@ -90,7 +90,8 @@ sequenceDiagram
 | `exp`          | `now + lifetime`, lifetime 1–300 s (the SDKs default to 60)                                   |
 
 The OP allows 60 seconds of clock leeway, which vpay cannot configure: it is a
-constant inside `authkestra-op`. Spent `jti`s do not pile up: the worker's hourly
+constant inside `authkestra-op`, and it did not move when v0.14.2 upgraded that
+crate from 0.7.1 to 0.13.1. Spent `jti`s do not pile up: the worker's hourly
 `sweep_expired` job deletes the expired ones. Since vpay 0.6.0 it keeps each
 spent `jti` for **five minutes past its `exp`**, measured on the database's
 clock ([ADR-0028](vpay:docs/adr/0028-a-spent-jti-outlives-the-validators-leeway.md)).
