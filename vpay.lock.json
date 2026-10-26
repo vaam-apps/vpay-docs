@@ -2,18 +2,18 @@
   "//": "What these pages were last verified against. tools/verify-parity.mjs reads it; .github/workflows/release-parity.yml compares vpay.tag to vpay's latest release. Bump it only in a change that also re-reads every page the parity report names as stale — a bump is a claim, not a formality.",
   "vpay": {
     "repository": "vaam-apps/vpay",
-    "tag": "v0.14.1",
-    "ref": "172a13a854b64d5d3fca6c2465ab9d29db613234",
-    "tagDate": "2026-10-25",
-    "verifiedAt": "2026-10-25",
+    "tag": "v0.14.2",
+    "ref": "0fc1183cf97ee90a201a323a8b5fd28843e10f95",
+    "tagDate": "2026-10-26",
+    "verifiedAt": null,
     "previous": {
-      "tag": "v0.14.0",
-      "ref": "4c62989ec901bbb2369409a9f4d47cd3453016c6"
+      "tag": "v0.14.1",
+      "ref": "172a13a854b64d5d3fca6c2465ab9d29db613234"
     }
   },
   "skills": {
     "repository": "vaam-apps/vpay-skills",
-    "ref": "2ca1a2b2e073eb8343536abc48dcc78fb413691a",
-    "verifiedAt": "2026-10-25"
+    "ref": "b05db5c87886ded7b54b2261f36ecd7c9f07e7bb",
+    "verifiedAt": null
   }
 }
