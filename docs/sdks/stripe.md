@@ -25,8 +25,8 @@ family. They answer different questions. **`@vaam-apps/vpay-stripe-js`** is a
 browser client for the _payer's_ page, shaped like Stripe.js so checkout code
 ports over. **`sdks/stripe-compat`** ships nothing: it is a conformance suite
 proving that a _merchant's_ server code written against the official `stripe`
-Node package works against a real vpay once the Node SDK's authenticator is
-plugged in. The server-side half of that story is on
+Node package works against a real vpay once the Node SDK's sealing
+`httpClient` is plugged in. The server-side half of that story is on
 [Node.js SDK](/sdks/nodejs#using-the-official-stripe-sdk) and
 [Stripe-shaped API](/api/stripe-compat).
 
@@ -169,14 +169,16 @@ run against a real browser or a running vpay.
 ## `sdks/stripe-compat`: the official `stripe` package, against a real stack {#stripe-compat}
 
 This suite takes the official `stripe` package — the one a merchant already has
-— and drives it through `createStripeAuthenticator` against a real
+— and drives it through `createStripeHttpClient`, which seals every request and
+opens every answer ([Signed requests](/api/signed-requests)), against a real
 `vpay-server`, worker, Postgres, WireMock rails and a WireMock webhook receiver,
-out of process over TCP.
+out of process over TCP. Until <Release /> it went through
+`createStripeAuthenticator`, a bearer-token hook deleted with the token.
 
 ```mermaid
 flowchart LR
   T["vitest compat suite"] --> S["official stripe package"]
-  S --> A["createStripeAuthenticator from @vaam-apps/vpay-sdk/stripe"]
+  S --> A["createStripeHttpClient from @vaam-apps/vpay-sdk/stripe (seals, opens)"]
   A --> V["real vpay-server"]
   V --> PG[("Postgres")]
   W["vpay-worker"] --> PG
@@ -190,19 +192,21 @@ flowchart LR
 just demo_port=18080 stripe-compat
 ```
 
-That recipe brings the stack up and runs the suite; `just demo-down` tears it
-down. What it covers:
+That recipe generates the demo merchant's throwaway signing seed and vpay's
+response keys, brings the stack up and runs the suite; `just demo-down` tears it
+down. Run by hand, it needs `VPAY_MERCHANT_SIGNING_SEED_PATH`,
+`VPAY_SERVER_KEY_CURRENT_PATH` and `VPAY_SERVER_KEY_NEXT_PATH`. What it covers:
 
 | File                         | Proves                                                                                                                                                                                                                                               |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lifecycle.compat.test.ts`   | create, retrieve, cursor paging with `autoPagingToArray`, cancel, confirm to `processing`, a bounded poll to `succeeded`; since v0.14.0, `payment_method_details` read through `unknown`, `null` after a cancel and `{ type, rail }` after a confirm |
 | `webhooks.compat.test.ts`    | a delivery the receiver actually recorded verifies with `stripe.webhooks.constructEvent`; tampered body and wrong secret are refused                                                                                                                 |
-| `errors.compat.test.ts`      | status → Stripe error class, `err.param`, `err.requestId`, the 409 retry advisory, money-moving parameters refused not ignored                                                                                                                       |
+| `errors.compat.test.ts`      | status → Stripe error class, `err.param`, `err.requestId`, the 409 retry advisory, money-moving parameters refused not ignored, a refused signature, an unknown operation and an over-limit body                                                     |
 | `idempotency.compat.test.ts` | stripe-node's auto-generated key, replay, reused key with a changed body                                                                                                                                                                             |
 | `headers.compat.test.ts`     | the `request-id` / `x-request-id` mirror; `Stripe-Version` and `Stripe-Account` accepted and ignored                                                                                                                                                 |
 
 **It cannot skip.** A `globalSetup` fails the run when no vpay answers
-`/healthz` or the merchant handshake does not complete — a suite that skipped
+`/healthz` or the merchant's first call does not complete — a suite that skipped
 itself would report green with zero cases. Its script is `compat`, not `test`,
 so a job with no stack never picks it up; CI runs it in the `e2e (compose)` job.
 
@@ -218,15 +222,15 @@ so a job with no stack never picks it up; CI runs it in the `e2e (compose)` job.
 
 ## Status in this release
 
-| Part                                                  | Status                  | Evidence                                                                                                                                                               |
-| ----------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `vpay-stripe-js` payment-intent half                  | <Status s="built" />    | Unit-tested against a `node:http` stub; Cypress drives `examples/checkout-browser` to `succeeded` on the compose stack (observed locally)                              |
-| `vpay-stripe-js` embedded checkout                    | <Status s="partial" />  | jsdom and stub suites; a Cypress spec completes a payment inside the embedded page                                                                                     |
-| `vpay-stripe-js` popup                                | <Status s="unproven" /> | Stub windows only; never driven by a real browser (dated ⛔)                                                                                                           |
-| `vpay-stripe-js` package suite against a running vpay | <Status s="unproven" /> | Its own suite is stub-only (dated ⛔)                                                                                                                                  |
-| Real sandbox payment evidence                         | <Status s="partial" />  | Over seven MTN **sandbox** payments succeeded on 2026-09-15; a documented sandbox run confirmed a payment through `examples/checkout-browser`, which uses this package |
-| `sdks/stripe-compat` against a real stack             | <Status s="built" />    | Runs in CI's `e2e (compose)` job; rails and receiver are WireMock                                                                                                      |
-| `stripe-should-retry: true`, `stripe.events.list()`   | <Status s="unproven" /> | Not observed / untested, per the flow's Status section                                                                                                                 |
+| Part                                                  | Status                  | Evidence                                                                                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vpay-stripe-js` payment-intent half                  | <Status s="built" />    | Unit-tested against a `node:http` stub; Cypress drives `examples/checkout-browser` to `succeeded` on the compose stack (observed locally)                                                                 |
+| `vpay-stripe-js` embedded checkout                    | <Status s="partial" />  | jsdom and stub suites; a Cypress spec completes a payment inside the embedded page                                                                                                                        |
+| `vpay-stripe-js` popup                                | <Status s="unproven" /> | Stub windows only; never driven by a real browser (dated ⛔)                                                                                                                                              |
+| `vpay-stripe-js` package suite against a running vpay | <Status s="unproven" /> | Its own suite is stub-only (dated ⛔)                                                                                                                                                                     |
+| Real sandbox payment evidence                         | <Status s="partial" />  | Over seven MTN **sandbox** payments succeeded on 2026-09-15; a documented sandbox run confirmed a payment through `examples/checkout-browser`, which uses this package                                    |
+| `sdks/stripe-compat` against a real stack             | <Status s="partial" />  | Runs in CI's `e2e (compose)` job; rails and receiver are WireMock. vpay's measured count (25 cases) predates the move to the sealing `httpClient`, which was not run against a stack where it was written |
+| `stripe-should-retry: true`, `stripe.events.list()`   | <Status s="unproven" /> | Not observed / untested, per the flow's Status section                                                                                                                                                    |
 
 The full record: the browser table of
 [docs/sdks/parity.md](vpay:docs/sdks/parity.md), the package

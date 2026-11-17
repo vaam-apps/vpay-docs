@@ -44,7 +44,7 @@ sequenceDiagram
     participant A as mtn_momo adapter
     participant MTN as MTN Collections
     M->>R: GET /v1/account_holders?msisdn=...&payment_method_type=mtn_momo
-    Note over M,R: Bearer token with payments:read or payments:write
+    Note over M,R: a signed request (or a bearer token, where permitted), payments:read or payments:write
     R->>R: tenant resolved, rail offered and enabled
     R->>R: supports_account_holder_lookup, else 400
     R->>R: msisdn is Cameroon E.164, else 400
@@ -76,8 +76,15 @@ that refusal; it guards the port.
 
 ```http
 GET /v1/account_holders?msisdn=237600000200&payment_method_type=mtn_momo
-Authorization: Bearer <token>
+Content-Type: application/cose
+
+<a COSE_Sign1 message: the SDK seals the method, route and canonical query>
 ```
+
+Since <Release /> the call is a [signed request](/api/signed-requests), so the
+SDKs make it for you, and the query is part of what the signature binds. Where
+a deployment's `auth.methods` permits it, an `Authorization: Bearer` token is
+accepted instead of a signature ([Authentication](/api/authentication)).
 
 ```json
 {

@@ -41,22 +41,35 @@ resolves from an environment variable, an explicit flag beating its variable.
 The two modes share one flag definition, so they cannot drift on a name or a
 default.
 
-| Flag                                    | Env var                       | Default        |
-| --------------------------------------- | ----------------------------- | -------------- |
-| `--bind` (serve only)                   | `VPAY_BIND`                   | `0.0.0.0:8080` |
-| `--database-url`                        | `DATABASE_URL`                | none           |
-| `--profile`                             | `VPAY_PROFILE`                | `sandbox`      |
-| `--config`                              | `VPAY_CONFIG`                 | none           |
-| `--observability-bind`                  | `VPAY_OBSERVABILITY_BIND`     | `0.0.0.0:9090` |
-| `--oauth-signing-key-file` (serve only) | `VPAY_OAUTH_SIGNING_KEY_FILE` | none           |
-| `--log-filter`                          | `RUST_LOG`                    | `info`         |
-| `--log-format` (`json` or `text`)       | `VPAY_LOG_FORMAT`             | `json`         |
-| `--shutdown-grace-seconds`              | `VPAY_SHUTDOWN_GRACE_SECONDS` | `25`           |
-| `--worker-concurrency` (worker only)    | `VPAY_WORKER_CONCURRENCY`     | `4`            |
+| Flag                                            | Env var                               | Default        |
+| ----------------------------------------------- | ------------------------------------- | -------------- |
+| `--bind` (serve only)                           | `VPAY_BIND`                           | `0.0.0.0:8080` |
+| `--database-url`                                | `DATABASE_URL`                        | none           |
+| `--profile`                                     | `VPAY_PROFILE`                        | `sandbox`      |
+| `--config`                                      | `VPAY_CONFIG`                         | none           |
+| `--observability-bind`                          | `VPAY_OBSERVABILITY_BIND`             | `0.0.0.0:9090` |
+| `--oauth-signing-key-file` (serve only)         | `VPAY_OAUTH_SIGNING_KEY_FILE`         | none           |
+| `--envelope-signing-key-file` (serve only)      | `VPAY_ENVELOPE_SIGNING_KEY_FILE`      | none           |
+| `--envelope-signing-key-next-file` (serve only) | `VPAY_ENVELOPE_SIGNING_KEY_NEXT_FILE` | none           |
+| `--log-filter`                                  | `RUST_LOG`                            | `info`         |
+| `--log-format` (`json` or `text`)               | `VPAY_LOG_FORMAT`                     | `json`         |
+| `--shutdown-grace-seconds`                      | `VPAY_SHUTDOWN_GRACE_SECONDS`         | `25`           |
+| `--worker-concurrency` (worker only)            | `VPAY_WORKER_CONCURRENCY`             | `4`            |
 
 `cargo run -p vpay-server -- --help` prints the live set and beats this table if
-they ever disagree. Everything else — rails, merchants, checkout, the dashboard
-client — is in the YAML file `--config` names.
+they ever disagree. Everything else — rails, merchants, the ways in, checkout,
+the console — is in the YAML file `--config` names.
+
+The two envelope flags, new in <Release />, name the seeds of vpay's two Ed25519
+**response keys**: the signed `/v1`, `/dash/v1` and `/svc/v1` seal every answer
+with one of them, and every client pins both public halves, so a rotation is a
+swap rather than a flag day ([Signed requests](/api/signed-requests#the-keys)).
+They are files, not values, for the same Secret-mount reason as the RS256 key,
+and `serve` refuses to start (exit `78`) when one is missing or malformed, or
+when the two are the same seed. Both public keys are logged at `info` at boot.
+`cargo xtask gen-envelope-key --out <dir> --name <stem>` writes a `.seed` and a
+`.pub`. A merchant's own signing key is a different pair, registered as
+`merchant_clients[].cose_keys`.
 
 ## A profile selects a file, never a code path
 
@@ -116,7 +129,9 @@ flowchart TD
   G -->|"no adapter, or incoherent capabilities"| X78
   G --> H["serve only: load the RS256 signing key"]
   H -->|"missing, unreadable, not RSA, under 2048 bits"| X78
-  H --> I["connect to Postgres, run migrations"]
+  H --> H2["serve only: load the two Ed25519 response keys"]
+  H2 -->|"missing, malformed, or the same seed twice"| X78
+  H2 --> I["connect to Postgres, run migrations"]
   I -->|"no DATABASE_URL"| X78
   I -->|"unreachable"| X69["exit 69: wait for Postgres"]
   I --> J["reconcile currencies and providers, one advisory-locked transaction"]
@@ -272,30 +287,98 @@ deployment holds a real MTN Disbursements credential; the compose stack's values
 are stubs aimed at WireMock. See [MTN MoMo](/rails/mtn-momo).
 :::
 
+## Which ways in: `auth:`
+
+New in <Release />, an optional top-level `auth:` block lists the ways a
+deployment authenticates
+([ADR-0037](vpay:docs/adr/0037-authentication-methods-are-deployment-configuration.md)):
+
+```yaml
+auth:
+  methods: [keypair, machine_tokens, hmac_webhooks, human_login]
+```
+
+**Absent means all four**, and `config/application.yml` leaves it absent on
+purpose, because writing it would turn the file's shipped behaviour off. vaam's
+deployment writes `[keypair]` (plus `hmac_webhooks` until sealed webhooks).
+
+| Method           | Permits                                                                           | Its blocks, refused when the method is off                     |
+| ---------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `keypair`        | signed `/v1` requests and sealed answers; the console on `/dash/v1` and `/svc/v1` | `merchant_clients[].cose_keys`, `dashboard`, `service_clients` |
+| `machine_tokens` | a bearer token on `/v1`, `/v1/oauth/token`, the MCP endpoint                      | `merchant_clients[].jwks`, `grant_types`, `allowed_audiences`  |
+| `hmac_webhooks`  | merchant webhooks signed with a shared secret                                     | `merchant_clients[].webhooks`                                  |
+| `human_login`    | staff password, TOTP and single sign-on on `/dash/v1`                             | `staff_auth` and `dashboard_client`, **both or neither**       |
+
+**Permitted is not served.** A method runs only where its blocks are written:
+the default permits `human_login`, and serves it only where both `staff_auth`
+and `dashboard_client` are present. `GET /.well-known/vpay-auth` answers which
+methods a deployment permits and serves. Every mode logs the resolved methods at
+boot. What `/v1` then accepts is on [Authentication](/api/authentication).
+
+### The console: `dashboard:` and `service_clients:`
+
+The management console is **off** in `config/application.yml`: with no
+`dashboard:` block, `/dash/v1` and `/svc/v1` are not mounted. To turn it on, an
+overlay adds:
+
+```yaml
+dashboard:
+  merchant_id: acme-cameroon # the ONE tenant /dash/v1 reads; must be registered
+
+service_clients: # the services that may call /svc/v1
+  - client_id: vaam
+    capabilities: [console_pairing]
+    cose_keys:
+      - public_key: ${VAAM_SERVICE_COSE_KEY} # Ed25519, unpadded base64url
+        label: vaam-2026-10
+```
+
+A capability is granted here and nowhere else. With no `service_clients` entry
+no service can pair a console key, and the only way in is
+`vpay-server staff pair-key`, run by an operator. A key may not appear in both
+`service_clients` and `merchant_clients`. The `live` and `notchpay-sandbox`
+overlays name a `dashboard.merchant_id`; the base file and the `sandbox`
+overlay do not, and none of the four writes a `service_clients` entry. The staff sign-in's own blocks, `staff_auth` and `dashboard_client`, are
+described on [Dashboard authentication](/dashboard/authentication).
+
+::: warning Upgrading a v0.15.0 configuration
+`dashboard_client` used to be in the base file and is not any more. If your
+overlay relied on it for the dashboard, you now need `dashboard:` for the
+console, and **both** `dashboard_client` and `staff_auth` for a staff sign-in:
+one without the other is refused at boot. A `[keypair]`-only deployment must
+also delete the OAuth half (`jwks`, `grant_types`, `allowed_audiences`) of its
+merchant registrations, which are refused as dormant. The upgrade's database
+half is on [Dashboard authentication](/dashboard/authentication#upgrading-from-v0-15-0).
+:::
+
 ## Rules that refuse to boot
 
 A selection of what boot refuses, most of it in `Config::validate_all` and the
 rest at boot against the linked adapters. Each is exit `78`:
 
-| Rule                                                                                                                                             | Why                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Every merchant registration has a unique `merchant_id`                                                                                           | It is the `/v1` tenancy boundary, and no foreign key backs it                                                                            |
-| Currency exponents match the canonical table                                                                                                     | A 100x amount bug is otherwise silent ([Money](/payments/money))                                                                         |
-| `livemode` ⇒ every host is `https://`                                                                                                            |                                                                                                                                          |
-| `livemode` ⇒ no host labelled `wiremock`, `stub`, `mock` or `localhost`                                                                          | What makes "the code cannot tell a stub from a real rail" safe                                                                           |
-| `livemode` ⇒ secrets are written as `${VAR}`, never literals                                                                                     | Checked against the file's _text_, before resolution                                                                                     |
-| `checkout.public_base_url` is a well-formed origin, `https://` under `livemode`                                                                  | Every payer link is built on it                                                                                                          |
-| `checkout_origins` entries are canonical origins, no duplicates across merchants                                                                 | They become `frame-ancestors`; a non-canonical spelling would be dropped silently                                                        |
-| `--worker-concurrency` ≤ 5 (worker only)                                                                                                         | Half the 10-connection pool; see [Crash safety](/payments/crash-safety)                                                                  |
-| No `callbacks:` block on a rail told its callback URL on every submit (`mtn_momo`, `orange_money`)                                               | The block would do nothing there, and a setting that does nothing is one somebody believes in                                            |
-| A linked adapter that registers its callback URL must declare that it calls back                                                                 | A registered endpoint that is never called is incoherent; refused at boot, exit 78                                                       |
-| A linked adapter that checks callbacks must declare that it calls back                                                                           | A check on a rail that never calls back would demand a secret nothing reads                                                              |
-| `livemode` and a rail that checks signatures ⇒ `callback_signing_secret`, or `callbacks.verify: off`                                             | Otherwise its callbacks would go unchecked in production; outside livemode it is a `WARN`                                                |
-| No signing setting on a rail that checks none, and never `verify: off` beside a secret                                                           | A setting that does nothing is one somebody believes in                                                                                  |
-| No signing secret with surrounding whitespace, and no previous secret without a current one                                                      | A trailing newline would become part of the key, and every genuine callback would be refused                                             |
-| `routing.weights`: a configured rail, a known method type, a weight up to 1000, no duplicates                                                    | Each a named error in `validate_all`                                                                                                     |
-| `routing.weights`: a type the rail's adapter serves; every enabled rail serves at least one type                                                 | Checked at boot against the linked adapter                                                                                               |
-| `merchant_clients[].cose_keys`: each an Ed25519 public key in unpadded base64url, any label 1–64 characters, no key registered twice in the file | New in <Release />. The keys are registered for a signed transport that is not in this release, and no request is verified with them yet |
+| Rule                                                                                                                                                       | Why                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every merchant registration has a unique `merchant_id`                                                                                                     | It is the `/v1` tenancy boundary, and no foreign key backs it                                                                                                                |
+| Currency exponents match the canonical table                                                                                                               | A 100x amount bug is otherwise silent ([Money](/payments/money))                                                                                                             |
+| `livemode` ⇒ every host is `https://`                                                                                                                      |                                                                                                                                                                              |
+| `livemode` ⇒ no host labelled `wiremock`, `stub`, `mock` or `localhost`                                                                                    | What makes "the code cannot tell a stub from a real rail" safe                                                                                                               |
+| `livemode` ⇒ secrets are written as `${VAR}`, never literals                                                                                               | Checked against the file's _text_, before resolution                                                                                                                         |
+| `checkout.public_base_url` is a well-formed origin, `https://` under `livemode`                                                                            | Every payer link is built on it                                                                                                                                              |
+| `checkout_origins` entries are canonical origins, no duplicates across merchants                                                                           | They become `frame-ancestors`; a non-canonical spelling would be dropped silently                                                                                            |
+| `--worker-concurrency` ≤ 5 (worker only)                                                                                                                   | Half the 10-connection pool; see [Crash safety](/payments/crash-safety)                                                                                                      |
+| No `callbacks:` block on a rail told its callback URL on every submit (`mtn_momo`, `orange_money`)                                                         | The block would do nothing there, and a setting that does nothing is one somebody believes in                                                                                |
+| A linked adapter that registers its callback URL must declare that it calls back                                                                           | A registered endpoint that is never called is incoherent; refused at boot, exit 78                                                                                           |
+| A linked adapter that checks callbacks must declare that it calls back                                                                                     | A check on a rail that never calls back would demand a secret nothing reads                                                                                                  |
+| `livemode` and a rail that checks signatures ⇒ `callback_signing_secret`, or `callbacks.verify: off`                                                       | Otherwise its callbacks would go unchecked in production; outside livemode it is a `WARN`                                                                                    |
+| No signing setting on a rail that checks none, and never `verify: off` beside a secret                                                                     | A setting that does nothing is one somebody believes in                                                                                                                      |
+| No signing secret with surrounding whitespace, and no previous secret without a current one                                                                | A trailing newline would become part of the key, and every genuine callback would be refused                                                                                 |
+| `routing.weights`: a configured rail, a known method type, a weight up to 1000, no duplicates                                                              | Each a named error in `validate_all`                                                                                                                                         |
+| `routing.weights`: a type the rail's adapter serves; every enabled rail serves at least one type                                                           | Checked at boot against the linked adapter                                                                                                                                   |
+| `merchant_clients[].cose_keys`: each an Ed25519 public key in unpadded base64url, any label 1–64 characters, no key registered twice in the file           | Since v0.15.0. They are what authenticates a signed `/v1` call since <Release />                                                                                             |
+| Every merchant registration has `cose_keys` or a `jwks`; `jwks`, `grant_types` and `allowed_audiences` only together                                       | A registration nobody can authenticate as, or a dormant OAuth half, is refused                                                                                               |
+| `auth.methods`: not empty or null, known names, no duplicates, at least one way into `/v1`, a block only with its method, `mcp` only with `machine_tokens` | Each its own `ConfigError` and fixture. A dormant block is how an operator comes to believe a door is shut                                                                   |
+| No `auth` key below the top level, and no near miss such as `auth_methods:`, a bare `methods:` or `Auth:`                                                  | Fixed in <Release />: an `auth` key at any depth, under `deployment:`, `checkout:` or a merchant entry, was otherwise dropped in silence (`MisplacedAuthKey`, `NearMissKey`) |
+| `dashboard.merchant_id` names a registered merchant, and the same one as `dashboard_client.merchant_id` when both are written                              | Otherwise the console reads an empty tenant that looks like a merchant with no payments                                                                                      |
 
 `livemode` is a single boolean under `deployment:`. Every file in the repository
 sets it `false`, so none of them exercises the livemode rules outside tests.
@@ -340,7 +423,10 @@ deployment has no supported way to supply them yet. See
 | `providers[].callbacks.register` and its two boot refusals | <Status s="partial" />   | Parsed, defaulted per adapter and refused in unit and integration tests; the pass it drives has met a WireMock Notch Pay only                                                       |
 | Callback signing settings and their six boot refusals      | <Status s="partial" />   | Each refusal tested in `boot.rs` in both modes and mutation-checked; the check they configure verified four real sandbox webhooks offline (2026-10-24), none through a running vpay |
 | `routing.weights` and its six refusals                     | <Status s="partial" />   | Each refusal tested and mutation-checked; the weight is the score's only component, and the fee is not built                                                                        |
-| `merchant_clients[].cose_keys` and its two boot refusals   | <Status s="partial" />   | Each refusal unit-tested in `vpay-config`. The base file leaves the list empty, and no request path reads it                                                                        |
+| `merchant_clients[].cose_keys` and its two boot refusals   | <Status s="built" />     | Each refusal unit-tested in `vpay-config`; the signed `/v1` reads them on every request. The base file leaves the list empty, so its placeholder merchant can sign nothing          |
+| `auth.methods` and its refusals, the misplaced-key fix     | <Status s="built" />     | One fixture per rule in `vpay-config` (20 refusal fixtures and 5 loading ones at VPA-1, more since for `human_login` and the misplaced key)                                         |
+| The two envelope key flags                                 | <Status s="built" />     | `a_missing_envelope_key_flag_is_exit_78_naming_the_flag`, `identical_or_malformed_envelope_keys_are_exit_78_without_echoing_them`                                                   |
+| `dashboard:` and `service_clients:`                        | <Status s="partial" />   | Validated and read by the console's integration suites; no service has paired a key, and vaam's side is not built                                                                   |
 | Hot reload                                                 | <Status s="not-built" /> | By design: a config change is a redeploy                                                                                                                                            |
 | Checkout-page files in Kubernetes                          | <Status s="not-built" /> | The chart templates no ConfigMap for them                                                                                                                                           |
 

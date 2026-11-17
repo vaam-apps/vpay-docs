@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="t d">
   <title id="t">vpay architecture</title>
-  <desc id="d">Merchants call /v1 with OAuth2 private_key_jwt. Payers use the hosted checkout page or the merchant's own page with vpay-stripe-js, which call /v1/browser. Staff use the dashboard, whose server calls /dash/v1. One vpay-server binary runs the API and, as a second process, the worker. The API submits a charge to the rail on confirm; the worker polls the rail's authenticated status query, recovers stuck submissions and delivers signed webhooks. Rails are reached only through the provider port: MTN MoMo (push), Orange Money (redirect), or a WireMock host in configuration. Everything is stored in PostgreSQL.</desc>
+  <desc id="d">Merchants call /v1 with signed messages under their own Ed25519 key, and vpay signs every answer; a deployment may also accept an OAuth2 bearer token. Payers use the hosted checkout page or the merchant's own page with vpay-stripe-js, which call /v1/browser. Staff sign in to the dashboard where a deployment serves a staff sign-in, and its server calls /dash/v1 with the session; /dash/v1 also takes a paired console key, which the dashboard cannot hold until VP-6b, and the dashboard reads no records in this release. One vpay-server binary runs the API and, as a second process, the worker. The API submits a charge to the rail on confirm; the worker polls the rail's authenticated status query, recovers stuck submissions and delivers signed webhooks. Rails are reached only through the provider port: MTN MoMo (push), Orange Money (redirect), or a WireMock host in configuration. Everything is stored in PostgreSQL.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#334155"/>
@@ -50,7 +50,7 @@
 
     <rect x="318" y="530" width="250" height="112" rx="14" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
     <text x="338" y="562" class="h">Dashboard</text>
-    <text x="338" y="586" class="s">Next.js with a server-side BFF</text>
+    <text x="338" y="586" class="s">Next.js; sign-in, no data pages yet</text>
     <text x="338" y="608" class="s">holds no merchant API key</text>
   </g>
 
@@ -124,7 +124,7 @@
   <!-- ===== edges ===== -->
   <!-- merchant -> /v1 -->
   <path class="edge" d="M264 150 H630" marker-end="url(#a)"/>
-  <text x="300" y="140" class="l"><tspan class="m">/v1</tspan> · OAuth2 client_credentials + private_key_jwt</text>
+  <text x="300" y="140" class="l"><tspan class="m">/v1</tspan> · signed messages (Ed25519), both ways</text>
   <!-- worker -> merchant webhooks -->
   <path class="edge" d="M640 452 H292 V192 H272" marker-end="url(#a)"/>
   <text x="338" y="472" class="l">signed webhooks (the worker)</text>
@@ -138,7 +138,7 @@
   <path class="edge" d="M264 586 H312" marker-end="url(#a)"/>
   <!-- dashboard -> /dash/v1 -->
   <path class="edge" d="M568 560 C 600 560, 596 238, 634 238" marker-end="url(#a)"/>
-  <text x="338" y="520" class="l"><tspan class="m">/dash/v1</tspan> · staff session</text>
+  <text x="338" y="520" class="l"><tspan class="m">/dash/v1</tspan> · staff session (a key: VP-6b)</text>
   <!-- serve/worker <-> postgres -->
   <path class="edge" d="M770 482 V534" marker-start="url(#a)" marker-end="url(#a)"/>
   <!-- serve -> rails : submit on confirm -->

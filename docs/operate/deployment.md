@@ -84,7 +84,7 @@ all the evidence so far.
 flowchart TD
   subgraph edge["Ingress or Gateway API HTTPRoute"]
     V1["/v1"]
-    TOK["/v1/oauth/token — tighter limit-rps"]
+    TOK["/v1/oauth/token — tighter limit-rps; mounted only with machine_tokens"]
     PRV["/provider — rail callbacks"]
   end
   subgraph chart["deploy/helm/vpay — rendered, never applied"]
@@ -96,7 +96,7 @@ flowchart TD
     CM["ConfigMap: profile overlay, subPath"]
   end
   subgraph operator["Created by the operator — the chart makes none"]
-    SEC["Secrets: database, signingKey, rails"]
+    SEC["Secrets: database, signingKey, envelopeKeys, rails"]
     PG[("Postgres")]
   end
   V1 --> SRV
@@ -109,7 +109,8 @@ flowchart TD
   SRV --> PG
   WRK --> PG
   MGT --> PG
-  DSH -->|"BFF, in-cluster, to -management or -server"| MGT
+  DSH -->|"sign-in calls from its server, in-cluster"| MGT
+  VAAM["a registered service (vaam)"] -.->|"/svc/v1, in-cluster, serviceIngress.peers"| SRV
   WRK -->|"egress"| RAILS["MTN MoMo, Orange Money, Notch Pay"]
   SRV -->|"egress"| RAILS
   MGT -.->|"egress, staff SSO only"| IDP["OpenID Connect provider"]
@@ -137,17 +138,42 @@ Configure vpay from the parent under the `vpay:` key. `just helm-check` lints
 and renders a real parent chart that depends on this one by `file://` path; the
 published OCI chart has not been consumed as a dependency from a registry.
 
+### The console and the staff sign-in
+
+Since <Release /> the console is a signed surface
+([Dashboard authentication](/dashboard/authentication)), and the chart's part in
+it is small:
+
+- **`/svc/v1`, where a registered service pairs console keys, is served by
+  `-server`**, the business tier, at the in-cluster origin vaam already dials.
+  With `networkPolicy.enabled`, list the calling service in
+  `networkPolicy.serviceIngress.peers`; a guard refuses a peer that selects
+  everything. No HTTPRoute or Ingress publishes `/svc/v1`.
+- **The management tier loads the envelope keys too**: its `/dash/v1` answers
+  are sealed with the same pair as `/v1`'s.
+- **A proxy in front of the management pod must not add an `Authorization`
+  header**: a signed request that carries one is a `400`.
+- **The dashboard's sign-in values**, `dashboard.clientId`,
+  `dashboard.redirectUri`, `dashboard.scope` and `dashboard.ssoIssuer`, are
+  rendered into the dashboard's environment only when set, and must equal the
+  overlay's `dashboard_client` and `staff_auth.sso`. They matter only where the
+  overlay serves `human_login`.
+- **The merchant MCP endpoint is not in the chart.** Nothing in its values,
+  NetworkPolicy, Ingress or compose sets the `mcp` surface; an `-mcp` workload is
+  ADR-0033 step 6, not built ([MCP for agents](/api/mcp)).
+
 ### Staff single sign-on
 
 Staff can sign in to the dashboard through an external OpenID Connect provider
-([Staff sign-in](/dashboard/authentication#single-sign-on-through-an-openid-connect-provider)).
+where the overlay serves `human_login`
+([Staff sign-in](/dashboard/authentication#single-sign-on)).
 **It is configured in the profile overlay, not in a chart value**: a
 `staff_auth.sso` block in `config.overlay` is the whole switch, and a release
-whose overlay has none renders exactly what it did before. Three things the YAML
+whose overlay has none renders exactly what it did before. Things the YAML
 does not say:
 
-- **The client secret is a new key in the `rails.existingSecret` Secret**,
-  `VPAY_STAFF_SSO_CLIENT_SECRET`. Add it before the overlay that writes the
+- **The client secret is a `${VAR}` the overlay names**, so it is a key in the
+  `rails.existingSecret` Secret. Add it before the overlay that writes the
   block rolls out: an unresolved `${…}` is exit 78 on every vpay process, not
   an empty string.
 - **`redirect_uri` is the dashboard's callback**,
@@ -157,7 +183,11 @@ does not say:
   `-management` when it is enabled, otherwise `-server`. A public provider on
   port 443 is already reachable under the chart's default egress rules. A
   provider on a private address, in the cluster or on another port needs
-  `networkPolicy.idpEgress`, which renders on that one pod only.
+  `networkPolicy.idpEgress`, which renders on that one pod only. It was
+  deleted with SSO during this release's development and is restored as it
+  stood.
+- **The dashboard draws the button only with `dashboard.ssoIssuer` set**, to
+  the issuer exactly as `staff_auth.sso.issuer` writes it.
 
 None of this is on record as having run in a cluster or against a real provider
 from this chart.
@@ -166,17 +196,22 @@ from this chart.
 
 Both modes refuse to start rather than start half-configured:
 
-| Needed                             | Supplied as                                                | Missing ⇒                                                 |
-| ---------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
-| `VPAY_CONFIG`                      | baked `ENV` in the image                                   | exit 78                                                   |
-| `DATABASE_URL`                     | Secret (`database.existingSecret`)                         | exit 78, both modes                                       |
-| Every `${VAR}` the config names    | Secret via `envFrom` (`rails.existingSecret`)              | exit 78, both modes                                       |
-| The RS256 signing key              | Secret mounted as a **file** (`signingKey.existingSecret`) | exit 78, server only                                      |
-| Postgres, reachable and migratable | outside the chart                                          | exit 69                                                   |
-| `worker.concurrency` ≤ 5           | chart value                                                | exit 78, worker only — and a chart guard refuses it first |
+| Needed                             | Supplied as                                                 | Missing ⇒                                                    |
+| ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `VPAY_CONFIG`                      | baked `ENV` in the image                                    | exit 78                                                      |
+| `DATABASE_URL`                     | Secret (`database.existingSecret`)                          | exit 78, both modes                                          |
+| Every `${VAR}` the config names    | Secret via `envFrom` (`rails.existingSecret`)               | exit 78, both modes                                          |
+| The RS256 signing key              | Secret mounted as a **file** (`signingKey.existingSecret`)  | exit 78, server only                                         |
+| The two Ed25519 envelope keys      | Secret mounted as **files** (`envelopeKeys.existingSecret`) | exit 78, wherever `/v1` or the management surface is mounted |
+| Postgres, reachable and migratable | outside the chart                                           | exit 69                                                      |
+| `worker.concurrency` ≤ 5           | chart value                                                 | exit 78, worker only — and a chart guard refuses it first    |
 
-The signing key is deliberately a file, never an environment value, and only the
-server mounts it — the worker issues no tokens.
+The signing keys are deliberately files, never environment values, and the
+worker mounts none of them — it issues no tokens and seals no answers. The chart
+generates no envelope key and fails the render unless
+`envelopeKeys.existingSecret` names a Secret holding two **different** seeds.
+Every merchant pins both public halves, so rotating them is a swap with no flag
+day ([Signed requests](/api/signed-requests#rotation)).
 [Configuration](/operate/configuration) explains the `${VAR}` rules.
 
 **A Notch Pay overlay adds three keys to the rails Secret**: the public and
@@ -347,17 +382,19 @@ helm upgrade --install vpay oci://ghcr.io/vaam-apps/charts/vpay --version "$VERS
 
 ## Status in this release
 
-| Part                                             | Status                   | Evidence                                                                                                                                                          |
-| ------------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Images built, published, signed by `release.yml` | <Status s="partial" />   | Runs green on `master` and tags; no pull, no `cosign verify` ever                                                                                                 |
-| Helm chart                                       | <Status s="unproven" />  | `just helm-check`: lint, renders, 24 named guards, kubeconform — never applied to a cluster                                                                       |
-| Chart published to OCI registry                  | <Status s="partial" />   | Published and signed on a tag; signature never verified                                                                                                           |
-| Compose (local and CI)                           | <Status s="built" />     | Boots in CI's `e2e` job and `just demo`                                                                                                                           |
-| Metrics and alerts                               | <Status s="unproven" />  | Series emitted and asserted in tests; the six rules tested by `promtool` against synthetic series in CI; never scraped, never evaluated against vpay's own series |
-| Management tier and autoscaling (ADR-0022)       | <Status s="unproven" />  | Rendered and guarded; the ADR is Proposed                                                                                                                         |
-| As a subchart of another chart                   | <Status s="partial" />   | A `file://` parent that sets `global` lints and renders in `just helm-check`                                                                                      |
-| Staff SSO configuration and IdP egress           | <Status s="unproven" />  | Renders byte-identical without the block; never booted in a cluster or against a real IdP                                                                         |
-| Database backups                                 | <Status s="not-built" /> | ADR-0013 proposed; no backup has ever been taken                                                                                                                  |
+| Part                                                     | Status                   | Evidence                                                                                                                                                                        |
+| -------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Images built, published, signed by `release.yml`         | <Status s="partial" />   | Runs green on `master` and tags; no pull, no `cosign verify` ever                                                                                                               |
+| Helm chart                                               | <Status s="unproven" />  | `just helm-check`: lint, renders, its named guards (two new in <Release />: the envelope-keys Secret and the `/svc/v1` ingress peers), kubeconform — never applied to a cluster |
+| Chart published to OCI registry                          | <Status s="partial" />   | Published and signed on a tag; signature never verified                                                                                                                         |
+| Compose (local and CI)                                   | <Status s="built" />     | Boots in CI's `e2e` job and `just demo`                                                                                                                                         |
+| Metrics and alerts                                       | <Status s="unproven" />  | Series emitted and asserted in tests; the six rules tested by `promtool` against synthetic series in CI; never scraped, never evaluated against vpay's own series               |
+| Management tier and autoscaling (ADR-0022)               | <Status s="unproven" />  | Rendered and guarded; the ADR is Proposed                                                                                                                                       |
+| As a subchart of another chart                           | <Status s="partial" />   | A `file://` parent that sets `global` lints and renders in `just helm-check`                                                                                                    |
+| Staff SSO configuration and IdP egress                   | <Status s="unproven" />  | Renders byte-identical without the block; never booted in a cluster or against a real IdP                                                                                       |
+| Envelope keys, `/svc/v1` peers, dashboard sign-in values | <Status s="unproven" />  | Rendered and guarded; never applied to a cluster                                                                                                                                |
+| The `mcp` surface                                        | <Status s="not-built" /> | Nothing in the chart or compose sets it                                                                                                                                         |
+| Database backups                                         | <Status s="not-built" /> | ADR-0013 proposed; no backup has ever been taken                                                                                                                                |
 
 The full record is the Status section of
 [docs/flows/deployment.md](vpay:docs/flows/deployment.md#status) and the chart's

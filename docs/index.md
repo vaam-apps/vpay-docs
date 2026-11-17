@@ -43,9 +43,9 @@ features:
   - icon: 🔌
     title: Integrate the Stripe way
     details:
-      Stripe's object model, idempotency and webhook signatures. Authentication
-      is OAuth2 private_key_jwt, and the official stripe package works through
-      an authenticator.
+      Stripe's object model, idempotency and webhook signatures. Every call is
+      a signed message under the merchant's own key, and the official stripe
+      package works through a sealing httpClient.
     link: /api/
     linkText: Merchant API
   - icon: 🤖
@@ -83,7 +83,8 @@ each feature's status before you rely on it.
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | decide whether vpay fits            | [What is vpay?](/guide/what-is-vpay), then [What works today](/guide/status)                              |
 | run it on your machine              | [Run it locally](/guide/quickstart)                                                                       |
-| integrate a merchant backend        | [Merchant API](/api/), [Authentication](/api/authentication), [SDKs](/sdks/)                              |
+| integrate a merchant backend        | [Merchant API](/api/), [Signed requests](/api/signed-requests), [SDKs](/sdks/)                            |
+| give a merchant's AI agent access   | [MCP for agents](/api/mcp), a first slice                                                                 |
 | take a payment from a payer         | [Hosted checkout](/checkout/hosted), [Browser checkout](/checkout/browser)                                |
 | understand where money can go wrong | [Payment lifecycle](/payments/lifecycle), [Crash safety](/payments/crash-safety)                          |
 | operate it                          | [Configuration](/operate/configuration), [Deployment](/operate/deployment), [Runbooks](/operate/runbooks) |

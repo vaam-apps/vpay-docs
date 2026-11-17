@@ -302,7 +302,10 @@ are not the total number of payments tested that day.
 To reproduce it yourself, follow vpay's
 [live sandbox runbook](vpay:docs/runbooks/live-sandbox-test.md): it needs your
 own Collections credentials, Postgres, the server, the worker and the browser
-checkout page.
+checkout page. Since <Release /> it also needs vpay's two response keys and the
+merchant's Ed25519 signing key, because `/v1` is signed. The 2026-09-15 run
+used the bearer token `/v1` took then, and **nothing has re-run the sandbox
+through the signed transport**.
 
 | Environment value    | Sandbox                                                     | Cameroon production                          |
 | -------------------- | ----------------------------------------------------------- | -------------------------------------------- |

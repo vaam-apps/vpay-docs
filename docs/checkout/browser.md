@@ -114,7 +114,7 @@ sequenceDiagram
 The server half, from the package README:
 
 ```ts
-// server (Node, @vaam-apps/vpay-sdk, OAuth2 private_key_jwt)
+// server (Node, @vaam-apps/vpay-sdk, which signs every /v1 call)
 const intent = await vpay.paymentIntents.create({
   amount: 5000,
   currency: "xaf",
