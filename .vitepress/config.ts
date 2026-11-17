@@ -129,11 +129,13 @@ export default defineMd3Config({
           text: "Merchant API",
           items: [
             { text: "Overview", link: "/api/" },
+            { text: "Signed requests", link: "/api/signed-requests" },
             { text: "Authentication", link: "/api/authentication" },
             { text: "Webhooks", link: "/api/webhooks" },
             { text: "Customers", link: "/api/customers" },
             { text: "Invoices", link: "/api/invoices" },
             { text: "Stripe compatibility", link: "/api/stripe-compat" },
+            { text: "MCP for agents", link: "/api/mcp" },
           ],
         },
         {

@@ -14,6 +14,7 @@ sources:
   - sdks/rust/src/model.rs
   - docs/adr/0015-sdk-parity.md
   - docs/flows/merchant-auth.md
+  - docs/flows/signed-transport.md
   - docs/flows/tauri-checkout.md
   - docs/runbooks/live-sandbox-test.md
   - examples/checkout-browser
@@ -24,8 +25,8 @@ skills:
 # SDKs
 
 vpay has two kinds of client, and they hold different credentials. **Merchant
-SDKs** run on the merchant's server, hold the merchant's private key, and call
-`/v1`. **Payer-facing clients** run in a payer's browser or phone, hold only a
+SDKs** run on the merchant's server, hold the merchant's Ed25519 signing key,
+and call `/v1` with signed messages. **Payer-facing clients** run in a payer's browser or phone, hold only a
 publishable key and one intent's or session's `client_secret`, and call
 `/v1/browser`. Keeping those apart is the point: a merchant credential on a
 payer's device is a credential that has left the merchant's control.
@@ -44,7 +45,7 @@ Agents working on any SDK should load [vpay-sdks](skill:vpay-sdks).
 | `@vaam-apps/vpay-stripe-compat`                                 | `sdks/stripe-compat`                    | CI only — **not an SDK**                                         | a live compose stack           | [Stripe compatibility](/sdks/stripe#stripe-compat) |
 
 `sdks/stripe-compat` ships nothing. It is evidence: the official `stripe` Node
-package, driven through the Node SDK's authenticator against a real
+package, driven through the Node SDK's sealing `httpClient` against a real
 `vpay-server`, to prove that a Stripe-shaped integration works. It gets no row
 in the parity matrix, because it proves claims rather than making its own.
 
@@ -65,20 +66,20 @@ flowchart TD
   Q -->|"payer's Flutter app"| FL["vpay_checkout_flutter"]
   Q -->|"payer's Tauri v2 app"| TA["@vaam-apps/vpay-tauri-checkout"]
   M -->|"Node, new integration"| N["@vaam-apps/vpay-sdk VpayClient"]
-  M -->|"Node, existing Stripe code"| SN["official stripe package + createStripeAuthenticator"]
+  M -->|"Node, existing Stripe code"| SN["official stripe package + createStripeHttpClient"]
   M -->|"Rust"| R["vpay-sdk crate"]
-  M -.->|"Rust, existing async-stripe code"| AS["no authenticator — dated gap"]
+  M -.->|"Rust, existing async-stripe code"| AS["no sealing transport — dated gap"]
   SJ --> CS["needs a client_secret your server minted"]
   FL --> CS
   TA --> CS
-  N --> V1["/v1 via private_key_jwt"]
+  N --> V1["/v1, every call a signed message"]
   SN --> V1
   R --> V1
 ```
 
-Whichever you pick, the flow has the same shape: your server authenticates with
-`client_credentials` + a signed `private_key_jwt` assertion
-([Authentication](/api/authentication)), creates a PaymentIntent or Checkout
+Whichever you pick, the flow has the same shape: your server signs each call
+with its registered Ed25519 key and pins vpay's response keys
+([Signed requests](/api/signed-requests)), creates a PaymentIntent or Checkout
 Session, and hands its `client_secret` to the payer-side client. The payer side
 confirms and polls; **your server learns the outcome from a signed webhook** and
 fulfils from that, never from what a payer's device reports.
@@ -89,9 +90,8 @@ sequenceDiagram
   participant V as vpay /v1
   participant P as Payer client
   participant B as vpay /v1/browser
-  MS->>V: token exchange, private_key_jwt
-  MS->>V: create PaymentIntent or Checkout Session
-  V-->>MS: object with client_secret
+  MS->>V: create PaymentIntent or Checkout Session, a signed message
+  V-->>MS: sealed answer, object with client_secret
   MS->>P: publishable key and client_secret
   P->>B: confirm, then poll the intent
   V-->>MS: signed webhook, payment_intent.succeeded
@@ -126,10 +126,10 @@ of it at <Release />:
 
 | Area                                                                                                                                     | `sdks/rust`                                                               | `sdks/nodejs`                                                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `private_key_jwt` assertion and token exchange                                                                                           | ✅                                                                        | ✅, except real-OP conformance is not CI-gated ⛔                     |
-| Token cache, refresh margin, single-flight                                                                                               | ✅, but a non-`Bearer` `token_type` is accepted ⛔                        | ✅                                                                    |
-| One re-auth on `401`, replaying body and `Idempotency-Key`                                                                               | ✅                                                                        | ✅, but a second concurrent `401` can discard a fresh token ⛔        |
-| Retries beyond that single `401`                                                                                                         | ⛔ none, deliberately                                                     | ⛔ none, deliberately                                                 |
+| Every call sealed, every answer opened under the pinned `{current, next}` keys (new in <Release />)                                      | ✅ natively                                                               | ✅ through the Rust code compiled to WebAssembly                      |
+| A key held outside the process (a KMS or HSM signer); no redirect followed; an 8 MiB answer bound                                        | ✅                                                                        | ✅                                                                    |
+| A bearer-token mode, for a deployment that permits tokens                                                                                | none; the token rows were removed, and VPA-6 is planned                   | the same                                                              |
+| Retries of any kind, a refused `401` included                                                                                            | ⛔ none, deliberately                                                     | ⛔ none, deliberately                                                 |
 | `payment_intents`, `refunds`, `checkout.sessions`, `customers`, `invoices`, `invoice_items`, `account_holders`, `balance`, `events.list` | ✅                                                                        | ✅                                                                    |
 | `payment_intents.confirm` on `notchpay`, the second push rail                                                                            | ✅                                                                        | ✅                                                                    |
 | `payment_intents.create` with a payment-method type (`mtn_wallet`, `orange_wallet`) beside a rail code                                   | ✅                                                                        | ✅                                                                    |
@@ -142,7 +142,7 @@ of it at <Release />:
 | `request-id` surfaced, `stripe-should-retry` read                                                                                        | ⛔                                                                        | ⛔                                                                    |
 | Webhook verification                                                                                                                     | ✅                                                                        | ✅, but a verified-but-undecodable body is not a distinct error ⛔    |
 | `client_secret` kept out of diagnostic output                                                                                            | ✅                                                                        | ⛔ on `PaymentIntent`; ✅ on Checkout Sessions                        |
-| An authenticator for the official Stripe SDK                                                                                             | ⛔ `async-stripe` has no per-request hook                                 | ✅                                                                    |
+| A sealing `httpClient` for the official Stripe SDK                                                                                       | ⛔ `async-stripe` has no seam for a transport that signs                  | ✅                                                                    |
 | Exercised against a running vpay                                                                                                         | ✅ refunds and invoices; ⛔ checkout sessions, customers, account holders | same as Rust                                                          |
 
 "Against a running vpay" means the SDK's live suites, which drive a real
@@ -185,7 +185,8 @@ in v0.14.1: they now point at `payment_method_details.rail` too.
 
 ::: warning One method with no route, one refund that never settles
 Both SDKs ship `balance.retrieve`, and the server does not serve `/v1/balance`:
-it is the one SDK method that reaches a `404 unknown_route`. And a
+since <Release /> both refuse it locally, before anything is signed, because no
+operation in the contract table serves it. And a
 `refunds.create` from either SDK reaches a real handler and returns a `pending`
 refund that **nothing settles** — there is no refund poll ladder. That is a gap
 in vpay, not a parity gap.
@@ -196,7 +197,7 @@ in vpay, not a parity gap.
 | Part                                        | Status                  | Evidence                                                                                                                                                                                                                                    |
 | ------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Parity gate, both directions and per column | <Status s="built" />    | `cargo xtask verify-sdk-parity` in `just verify`                                                                                                                                                                                            |
-| Merchant SDKs against a running vpay        | <Status s="partial" />  | Live suites for refunds and invoices; most cases run against in-process stubs                                                                                                                                                               |
+| Merchant SDKs against a running vpay        | <Status s="partial" />  | Signing proven against the real layer and a real router; live suites for refunds and invoices, which the sealing change did not run where it was written (CI's `e2e` job is their evidence); most cases run against in-process stubs        |
 | Browser client and Flutter plugin           | <Status s="partial" />  | Proven against stubs and, in parts, a live compose stack                                                                                                                                                                                    |
 | Tauri plugin                                | <Status s="partial" />  | Two checkouts to `succeeded` on an iOS Simulator and an Android emulator against a running vpay with a WireMock rail; its Rust, Kotlin and Swift are in no gate                                                                             |
 | Any SDK in the path of a real rail call     | <Status s="unproven" /> | Over seven MTN sandbox payments succeeded on 2026-09-15; a documented sandbox run used the Node SDK and `vpay-stripe-js`. On 2026-10-21 and -22 the Node SDK took six Notch Pay sandbox payments through vpay. No other rail, no production |
@@ -210,7 +211,8 @@ See [docs/status.md](vpay:docs/status.md) for the repository-wide picture and
   ledger
 - [docs/sdks/README.md](vpay:docs/sdks/README.md)
 - [ADR-0015: SDK parity, machine-checked](vpay:docs/adr/0015-sdk-parity.md)
-- [docs/flows/merchant-auth.md](vpay:docs/flows/merchant-auth.md) — the wire
-  contract both merchant SDKs implement
+- [docs/flows/signed-transport.md](vpay:docs/flows/signed-transport.md) — the
+  wire contract both merchant SDKs implement, and
+  [merchant-auth.md](vpay:docs/flows/merchant-auth.md) for the resource calls
 - [Parity of these docs](/about/parity) — how this site is kept true of vpay
 - Skill: [vpay-sdks](skill:vpay-sdks)

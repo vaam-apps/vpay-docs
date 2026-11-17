@@ -74,17 +74,21 @@ just demo-down          # containers AND volumes
 
 `just demo` is two recipes run in sequence, and each can also be run on its own:
 
-| Recipe             | What it does                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `just demo-up`     | Runs `gen-demo-keys`, then `docker compose up -d --build --wait`, then polls `/healthz`                             |
-| `just demo-walk`   | Runs `examples/merchant-demo` against a stack that is already up. You can run it again: each run uses fresh intents |
-| `just demo-status` | Shows what is running, under which project and on which host ports                                                  |
-| `just demo-down`   | Stops the stack and deletes its volumes                                                                             |
-| `just demo-staff`  | Creates a dashboard staff member and writes the one-time password to `.e2e/<demo_project>/staff-password.txt`       |
+| Recipe             | What it does                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `just demo-up`     | Runs `gen-demo-keys`, then `docker compose up -d --build --wait`, then polls `/healthz`                                |
+| `just demo-walk`   | Runs `examples/merchant-demo` against a stack that is already up. You can run it again: each run uses fresh intents    |
+| `just demo-status` | Shows what is running, under which project and on which host ports                                                     |
+| `just demo-down`   | Stops the stack and deletes its volumes                                                                                |
+| `just demo-staff`  | Creates a dashboard staff member and keeps the one-time password it prints in `.e2e/<demo_project>/staff-password.txt` |
 
-`gen-demo-keys` generates a throwaway RS256 key for the server's OAuth provider
-and a second one for a demo merchant, both in `.e2e/`, which git ignores. It
-registers the merchant's **public** JWK in a `demo` profile overlay.
+`gen-demo-keys` generates throwaway keys in `.e2e/`, which git ignores: vpay's
+two Ed25519 response keys (`gen-envelope-keys`), an Ed25519 signing seed for
+each demo merchant, the RS256 key the server's OAuth provider still loads, and
+the staff sign-in's pepper and TOTP key. It writes a `demo` profile overlay that
+registers each merchant's **public** signing key under `cose_keys` and runs
+`auth.methods: [keypair, hmac_webhooks, human_login]`: signed requests, signed
+webhooks and a staff sign-in, and no merchant bearer token.
 
 ### What `just demo-up` starts
 
@@ -119,11 +123,13 @@ polls `/healthz` from the outside instead of trusting `--wait` alone.
 `examples/merchant-demo` is a Rust program built on the real merchant SDK. It
 runs six steps:
 
-1. It fetches the OP's discovery document and JWKS.
-2. It gets an access token with `client_credentials` + `private_key_jwt`, and
-   prints the decoded claims, never the token itself.
-3. It calls `/v1` **without** a token and gets a `401` with vpay's error
-   envelope.
+1. It makes a **signed read**: the request is a COSE_Sign1 message under the
+   demo merchant's key, and the SDK opens vpay's sealed answer under the
+   response keys the demo pins.
+2. It sends the same path with a **bearer token and no signature**, and is
+   refused: the demo overlay permits no merchant token.
+3. It sends the same path with **no signature at all**, and gets vpay's coarse
+   unsigned `401`, the same bytes whatever the cause.
 4. It makes **six payments**. Each is created, read back, confirmed and settled
    by the worker, and its webhook is read from the receiver's own journal and
    verified with the SDK:
@@ -159,7 +165,7 @@ overlay only. **MTN's real sandbox rejects XAF**, which is why
 
 | Proves                                                                     | Does not prove                                                                     |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| The `private_key_jwt` handshake works end to end                           | That MTN or Orange work                                                            |
+| A signed call works end to end, and an unsigned one is refused             | That MTN or Orange work                                                            |
 | Both flow shapes and the exact failure code for each failing outcome       | That a payer can complete Orange's hosted page (the URL is printed, never clicked) |
 | The API response and the stored row agree                                  | That vpay's checkout page or the shop works (the demo never opens either)          |
 | Settlement is the worker asking the rail over HTTP                         | That a rail can call vpay back (no stub calls the callback route)                  |
@@ -173,9 +179,14 @@ overlay only. **MTN's real sandbox rejects XAF**, which is why
   See [Hosted checkout](/checkout/hosted) and
   [`docs/runbooks/checkout.md`](vpay:docs/runbooks/checkout.md).
 - **The dashboard.** There is no sign-up. Run `just demo-staff` against the
-  running stack, then sign in on `http://localhost:3000` with the one-time
-  password it wrote. You will enrol TOTP and replace the password. By default it
-  shows the **shop's** tenant, not the walkthrough's. See
+  running stack, then sign in on `http://localhost:3000` (not another name for
+  the machine: the session cookie is `__Host-` and `Secure`) with the one-time
+  password it kept. You will enrol TOTP and replace the password, and land on an
+  account page naming the **shop's** tenant. **It shows no payments**: the
+  application reads nothing from `/dash/v1` in <Release />. Reading the shop's
+  payments means signing requests with a console key paired by
+  `vpay-server staff pair-key`, as vpay's
+  [demo runbook](vpay:docs/runbooks/demo/dashboard-sign-in.md) shows. See
   [Dashboard authentication](/dashboard/authentication).
 
 ### Two demos on one machine
@@ -201,12 +212,18 @@ cargo run -p vpay-server -- --help
 cargo run -p vpay-server -- worker --help
 ```
 
-The server signs merchant tokens, so it needs an RS256 key before it will start.
-Generate one offline:
+The server needs three keys before it will start: an RS256 key for its OAuth
+provider, and the two Ed25519 response keys the signed `/v1` seals every answer
+with (the one it uses now, and the next). Generate them offline:
 
 ```bash
 cargo xtask gen-signing-key --out ./secrets   # writes ./secrets/oauth-signing-key.pem
+cargo xtask gen-envelope-key --out ./secrets --name envelope-signing-key        # .seed and .pub
+cargo xtask gen-envelope-key --out ./secrets --name envelope-signing-key-next
 ```
+
+The `.pub` files are what every merchant pins; a merchant's own signing key is
+another pair, registered in YAML as `cose_keys`.
 
 The rail credentials in `config/application.yml` are `${VAR}` placeholders, and
 an unresolved placeholder is a fatal startup error. So every one of them must be
@@ -224,6 +241,8 @@ cargo run -p vpay-server -- \
   --config config/application.yml \
   --database-url postgres://vpay:vpay@localhost:5432/vpay \
   --oauth-signing-key-file ./secrets/oauth-signing-key.pem \
+  --envelope-signing-key-file ./secrets/envelope-signing-key.seed \
+  --envelope-signing-key-next-file ./secrets/envelope-signing-key-next.seed \
   --bind 127.0.0.1:8080 --log-format text
 ```
 
@@ -231,14 +250,15 @@ The three Disbursements variables are empty on purpose. No real MTN
 Disbursements credential exists in the project, so a refund answers
 `ProviderError::Config`, which names the blank variable.
 
-| Flag                       | Env var                       | Required by                                      |
-| -------------------------- | ----------------------------- | ------------------------------------------------ |
-| `--config`                 | `VPAY_CONFIG`                 | every mode                                       |
-| `--database-url`           | `DATABASE_URL`                | every mode                                       |
-| `--oauth-signing-key-file` | `VPAY_OAUTH_SIGNING_KEY_FILE` | serve only (the worker does not accept it)       |
-| `--bind`                   | `VPAY_BIND`                   | —                                                |
-| `--log-format`             | `VPAY_LOG_FORMAT`             | —                                                |
-| `--observability-bind`     | `VPAY_OBSERVABILITY_BIND`     | — (default `0.0.0.0:9090`: `/livez`, `/metrics`) |
+| Flag                                                              | Env var                                                                 | Required by                                          |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| `--config`                                                        | `VPAY_CONFIG`                                                           | every mode                                           |
+| `--database-url`                                                  | `DATABASE_URL`                                                          | every mode                                           |
+| `--oauth-signing-key-file`                                        | `VPAY_OAUTH_SIGNING_KEY_FILE`                                           | serve only (the worker does not accept it)           |
+| `--envelope-signing-key-file`, `--envelope-signing-key-next-file` | `VPAY_ENVELOPE_SIGNING_KEY_FILE`, `VPAY_ENVELOPE_SIGNING_KEY_NEXT_FILE` | serve only, wherever `/v1` or the console is mounted |
+| `--bind`                                                          | `VPAY_BIND`                                                             | —                                                    |
+| `--log-format`                                                    | `VPAY_LOG_FORMAT`                                                       | —                                                    |
+| `--observability-bind`                                            | `VPAY_OBSERVABILITY_BIND`                                               | — (default `0.0.0.0:9090`: `/livez`, `/metrics`)     |
 
 If a required option is missing, the process exits with code **`78`**
 (`EX_CONFIG`) before it binds the port. This is true in both modes. Both modes
@@ -281,23 +301,24 @@ renders. CI's `deploy (helm chart)` job runs both. See
 
 ## What can go wrong
 
-| Symptom                                                                       | Cause and fix                                                                                                              |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `port is already allocated`                                                   | Another process holds a published port. Move it with the matching `demo_*` variable                                        |
-| `invalid_client` at step 2                                                    | Another `demo-up` regenerated the shared keys, or `deployment.public_base_url` disagrees with `VPAY_BASE_URL`              |
-| `/healthz` never answers in 120 s                                             | `demo-up` prints `docker compose ps` and the server log. Exit `78` means a config or CLI prerequisite is missing           |
-| `vpay-shop` dies with `database "shop" does not exist`                        | A `pgdata` volume that is older than the shop. Run `just demo-down` (it deletes volumes), then `just demo`                 |
-| A confirm answers `rail 'mtn_momo' settles in EUR; this PaymentIntent is XAF` | An old overlay. `just gen-demo-keys` regenerates it                                                                        |
-| Cypress will not start                                                        | Its binary is not fetched by `pnpm install`. Run `pnpm exec cypress install`, or set `CYPRESS_INSTALL_BINARY=0` to skip it |
-| Four `staff_sign_in.rs` cases fail on macOS with `os error 49`                | macOS gives only `127.0.0.1` to `lo0`. Run `just loopback-aliases` once per boot                                           |
-| testcontainers cannot find Docker (rootless)                                  | `DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock cargo nextest run --workspace`                                          |
-| `just build-dist` fails for the musl target                                   | `rustup target add x86_64-unknown-linux-musl`                                                                              |
+| Symptom                                                                       | Cause and fix                                                                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `port is already allocated`                                                   | Another process holds a published port. Move it with the matching `demo_*` variable                                             |
+| A coarse `401` at step 1                                                      | Another `demo-up` regenerated the shared keys, or `deployment.public_base_url` disagrees with the audience the client signs for |
+| Steps 2 and 3 fail, saying a token was accepted                               | The overlay permits `machine_tokens`. `just gen-demo-keys` regenerates one that does not                                        |
+| `/healthz` never answers in 120 s                                             | `demo-up` prints `docker compose ps` and the server log. Exit `78` means a config or CLI prerequisite is missing                |
+| `vpay-shop` dies with `database "shop" does not exist`                        | A `pgdata` volume that is older than the shop. Run `just demo-down` (it deletes volumes), then `just demo`                      |
+| A confirm answers `rail 'mtn_momo' settles in EUR; this PaymentIntent is XAF` | An old overlay. `just gen-demo-keys` regenerates it                                                                             |
+| Cypress will not start                                                        | Its binary is not fetched by `pnpm install`. Run `pnpm exec cypress install`, or set `CYPRESS_INSTALL_BINARY=0` to skip it      |
+| The dashboard's sign-in does not stick                                        | It was reached by a name other than `localhost` over plain `http`; its `__Host-` cookie needs a secure context                  |
+| testcontainers cannot find Docker (rootless)                                  | `DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock cargo nextest run --workspace`                                               |
+| `just build-dist` fails for the musl target                                   | `rustup target add x86_64-unknown-linux-musl`                                                                                   |
 
 ## Status in this release
 
 | Part                        | Status                  | Evidence                                                                                                                                                                                                                                                      |
 | --------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate                                                                                                                                                      |
+| `just demo` from nothing    | <Status s="partial" />  | Green three times in a row on the merged Step 9 branch. It is a harness a person reads, not a build gate, and its pasted transcript predates the signed `/v1` of <Release />                                                                                  |
 | `just test-e2e`             | <Status s="built" />    | Green against the compose stack, and the MVP item for it is met. The rails are WireMock hosts                                                                                                                                                                 |
 | Running against a real rail | <Status s="unproven" /> | Sandboxes only, run as host processes and never by the demo: over seven MTN sandbox payments succeeded using a separate `live` profile, and Notch Pay's sandbox took three test-mode payments through the `notchpay` adapter. The demo never leaves its stubs |
 

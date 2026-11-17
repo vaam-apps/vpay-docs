@@ -233,11 +233,16 @@ either, then the old one is removed. In livemode a secret must come from the
 environment and be at least 32 bytes once resolved. Changing any of this is a
 deploy of both `vpay-server` and `vpay-worker`.
 
-::: info Not the OAuth signing key
+::: info Not the OAuth signing key, and not the response keys
 Webhook secrets are HMAC keys per merchant endpoint. The RSA key that signs
-merchant **access tokens** is separate and is rotated by a different procedure:
+merchant **access tokens**, where a deployment permits them, is separate and is
+rotated by a different procedure:
 [rotate-signing-key.md](vpay:docs/runbooks/rotate-signing-key.md), covered on
-[Authentication](/api/authentication).
+[Authentication](/api/authentication). So are the two Ed25519 response keys
+that seal every `/v1` answer ([Signed requests](/api/signed-requests#rotation)).
+Since <Release /> merchant webhooks signed with a shared secret are the
+`hmac_webhooks` method of `auth.methods`: a deployment that leaves it out
+refuses any webhook endpoint at boot, and there is no other delivery mode yet.
 :::
 
 ## What a receiver must get right

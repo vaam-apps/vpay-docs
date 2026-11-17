@@ -297,15 +297,29 @@ site's own runs show the same for v0.10.3, v0.10.4 and v0.11.0
   down-migrations), a signing-key rotation, and anything a rail already did.
 - Exit 78 is configuration and restarting never fixes it; 69 is the database; 1
   is a drain cut short.
+- **Upgrading from v0.15.0 deletes staff passwords and authenticators** unless
+  you export them first: migration 0056 deletes the `password` and `totp`
+  credentials and 0058 restores the tables empty. The runbook has the export and
+  the restore, and the test that holds them to the statements it ran. Keep the
+  staff pepper and TOTP key unchanged. `oidc` links survive. See
+  [Dashboard authentication](/dashboard/authentication#upgrading-from-v0-15-0).
+- The server now needs two more Secrets' worth of keys, vpay's Ed25519 response
+  keys (`envelopeKeys.existingSecret`), and a proxy in front of the management
+  pod must not add an `Authorization` header to a signed request.
 
 _Evidence:_ none against a cluster — written from the chart and the binaries'
-shutdown code and tests.
+shutdown code and tests. The credential export and restore is run against a
+real database by `a_credential_export_taken_before_0056_is_restored_after_0058`.
 [docs/runbooks/deploy-and-rollback.md](vpay:docs/runbooks/deploy-and-rollback.md)
 
 ### Rotate the signing key
 
-**When:** rotating the RS256 key the server signs `/v1` tokens with, or a server
-crash-looping on a retired `kid`.
+**When:** rotating the RS256 key vpay's OAuth provider signs tokens with (merchant
+tokens where `machine_tokens` is permitted, staff tokens where `human_login` is
+served), or a server crash-looping on a retired `kid`. This is not the signed
+`/v1`'s response key: that pair is rotated by publishing `next` first and then
+swapping the seeds ([Signed requests](/api/signed-requests#rotation)), and no
+runbook covers it yet.
 
 - Rotation is a restart: replace the Secret, restart the server Deployment. The
   old key keeps verifying for a 24-hour overlap.
@@ -331,8 +345,9 @@ merchant client.
 - A bad credential shows up as `error_kind = 'misconfigured'` from the moment
   you restarted — it reads like a rail outage.
 - vpay holds no merchant secret. Revoking a merchant is an insert into
-  `disabled_clients`, effective on the next token request; tokens already issued
-  live out their 900-second TTL.
+  `disabled_clients`, effective on its next request: a signed call's key resolves
+  to nothing, and since <Release /> a bearer token on `/v1` is checked against
+  the same table, so a token already issued stops working too.
 
 _Evidence:_ no `kubectl` step has been run, and no credential rotation has been
 observed. The MTN sandbox tests of 2026-09-15 used real sandbox credentials, but
@@ -347,14 +362,24 @@ they do not exercise this procedure.
 **When:** bringing vpay up from nothing on one machine and walking payments
 through both rails.
 
-- `just demo` generates throwaway keys, builds the images, and boots nine
+- `just demo` generates throwaway keys (since <Release /> also vpay's two
+  response keys and each merchant's Ed25519 signing key), builds the images, and
+  boots nine
   services — Postgres, three WireMock hosts (MTN, Orange, the webhook receiver),
   the server, the worker, vpay's checkout page, the demo shop and the dashboard
   — then runs `examples/merchant-demo`: six payments, every outcome each rail
   documents, each walked to its signed webhook.
 - `just demo-down` removes containers **and** volumes.
 - Its output is a pasted real run, and it found a real confirm/worker race that
-  was then fixed.
+  was then fixed. The transcript predates the signed `/v1`; the walkthrough now
+  opens with a signed read, a bearer token refused and the coarse unsigned
+  `401`, which hold because the demo overlay runs
+  `auth.methods: [keypair, hmac_webhooks, human_login]` and so permits no
+  merchant token.
+- The dashboard signs a staff member in with a password (`just demo-staff`
+  creates one) on `http://localhost:3000`, and lands on an account page: it
+  shows no payments until VP-6b. Reading the shop's payments by hand is the
+  break-glass, a paired console key.
 
 _What it does not prove:_ anything about MTN or Orange — both rails are
 WireMock. No money moved. [docs/runbooks/demo.md](vpay:docs/runbooks/demo.md) ·
@@ -390,7 +415,11 @@ machine — server, worker, payer page and dashboard.
   callback.
 
 _Evidence:_ the first page whose commands ran against a real rail, on
-2026-09-15. It is not evidence of MTN production, Orange, refunds or a cluster.
+2026-09-15, when `/v1` still took a bearer token. Its commands now generate
+vpay's response keys and the merchant's Ed25519 seed for the signed `/v1`, and
+that version has not been re-run against the sandbox. The live profile writes no
+staff sign-in, so its dashboard step is the break-glass key. It is not evidence
+of MTN production, Orange, refunds or a cluster.
 [docs/runbooks/live-sandbox-test.md](vpay:docs/runbooks/live-sandbox-test.md) ·
 background: [MTN MoMo](/rails/mtn-momo)
 
@@ -468,7 +497,10 @@ only: no production, no live key, no refund, no webhook through a running
 vpay, no endpoint registered by vpay, and
 through vpay the one-call build only, not the two-step submit or the
 per-network channels. The profile configures no signing secret, so the run
-also says nothing about vpay's signature check.
+also says nothing about vpay's signature check. Part B's runs predate the
+signed `/v1` of <Release />; the runbook's Part B now generates vpay's response
+keys and an Ed25519 signing key for the merchant, and no run of that version is
+on record.
 [docs/runbooks/notchpay-sandbox-test.md](vpay:docs/runbooks/notchpay-sandbox-test.md)
 · background: [Notch Pay](/rails/notchpay)
 
@@ -476,7 +508,7 @@ also says nothing about vpay's signature check.
 
 | Runbook group                                               | Status                  | Evidence                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Demo, checkout, live sandbox test                           | <Status s="built" />    | Executed end to end on one machine; checkout in CI via Cypress                                                                                                                                                                                                                                                                                                                        |
+| Demo, checkout, live sandbox test                           | <Status s="partial" />  | Executed end to end on one machine, the demo and the live sandbox test before the signed `/v1` of this release and not re-run since by hand (the live sandbox test against MTN not at all); checkout and the demo stack in CI via Cypress                                                                                                                                             |
 | Worker queue, webhook failures, migrations, restore         | <Status s="partial" />  | SQL executed against real Postgres; procedures never followed on a deployment                                                                                                                                                                                                                                                                                                         |
 | Deploy/rollback, both rotations, release                    | <Status s="unproven" /> | Written from the chart and code; no `kubectl`/`helm` step ever run against a cluster                                                                                                                                                                                                                                                                                                  |
 | Unresolved charges, provider error rate, callback endpoints | <Status s="unproven" /> | Rules tested by `promtool` against synthetic series only; never evaluated against vpay's own metrics; thresholds proposed                                                                                                                                                                                                                                                             |

@@ -158,18 +158,18 @@ sequenceDiagram
     participant N as Notch Pay
     participant P as Payer handset
     participant W as vpay worker
-    Note over A,N: The wire calls have met Notch Pay's real sandbox through vpay (six payments, 2026-10-21 and -22) and WireMock. vpay's two port calls and per-network channels have met WireMock only; the probe measured Notch Pay's side of both. Production never. No webhook has reached a running vpay; four reached a dashboard-registered capture endpoint on 2026-10-24.
+    Note over A,N: The wire calls have met Notch Pay's real sandbox through vpay (six payments, 2026-10-21 and -22) and WireMock. vpay's two port calls and per-network channels have met WireMock only, and the probe measured Notch Pay's side of both. Production never. No webhook has reached a running vpay, and four reached a dashboard-registered capture endpoint on 2026-10-24.
     API->>A: prepare(charge, config)
     A->>N: POST /payments (amount, XAF, phone, reference = charge UUID)
     N-->>A: 201 pending, reference trx.…, trxref = charge UUID
     A-->>API: notchpay_reference = trx.… (nobody prompted yet)
     API->>DB: commit trx.… on the charge, then the submit row
     API->>A: submit(charge, config)
-    A->>N: POST /payments/{trx.…} (channel cm.mtn, cm.orange or cm.mobile; phone)
+    A->>N: POST /payments/{trx.…} (channel cm.mtn, cm.orange or cm.mobile, and the phone)
     N->>P: USSD prompt
     N-->>A: 202
     A-->>API: Submitted (no redirect)
-    opt webhook (a hint only; none has reached vpay yet)
+    opt webhook (a hint only, and none has reached vpay yet)
         N->>API: POST /provider/notchpay/callback
         API->>A: verify_callback(headers, raw body)
         A-->>API: Verified, Invalid or NoSecret
@@ -524,6 +524,11 @@ Notch Pay's side. None received a webhook. The probe's
 `dashboard-deliveries` phase (runbook A8) recorded the first four on
 2026-10-24, at a capture endpoint registered in the dashboard: they measured
 the signature and found the `event` key.
+
+Part B's runs predate <Release />'s signed `/v1`: `examples/merchant-node`
+authenticated with the bearer token `/v1` took then. The runbook now generates
+vpay's response keys and an Ed25519 signing key for the merchant, and no Part B
+run through the signed transport is on record.
 
 ## Go deeper
 

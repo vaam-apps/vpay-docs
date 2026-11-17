@@ -9,6 +9,7 @@ sources:
   - AGENTS.md
   - docs/adr/0002-provider-port.md
   - docs/adr/0010-merchant-auth-private-key-jwt.md
+  - docs/adr/0035-v1-is-a-signed-message-not-a-token.md
   - docs/flows/payment-lifecycle.md
   - docs/flows/adapter-notchpay.md
   - docs/status.md
@@ -114,16 +115,20 @@ copied from Stripe on purpose, so that a merchant's existing knowledge and code
 carry over. The comparison breaks in three places:
 
 1. **Authentication.** This is the big one. `/v1` accepts no
-   `sk_live_`/`sk_test_` API key. Merchants authenticate with OAuth2
-   `client_credentials` plus `private_key_jwt` (RFC 7523). Each merchant is a
-   statically registered client that holds its own private key, and vpay stores
-   only the public half, in YAML
-   ([ADR-0010](vpay:docs/adr/0010-merchant-auth-private-key-jwt.md)). The
-   official `stripe` package can still reach vpay: `@vaam-apps/vpay-sdk/stripe`
-   supplies a `config.authenticator`, so
-   `new Stripe("", { authenticator, host, port, protocol })` works with an empty
-   key. See [Stripe compatibility](/api/stripe-compat) and
-   [Authentication](/api/authentication).
+   `sk_live_`/`sk_test_` API key. Since <Release /> every call is a **signed
+   message** (COSE_Sign1, Ed25519) and every answer is one signed by vpay. Each
+   merchant is a statically registered client that holds its own signing key,
+   vpay stores only the public half, in YAML, and every merchant pins vpay's
+   response keys ([ADR-0035](vpay:docs/adr/0035-v1-is-a-signed-message-not-a-token.md)).
+   A deployment may also accept a bearer token from OAuth2 `client_credentials`
+   plus `private_key_jwt` beside it: which ways in it has is its own
+   configuration, `auth.methods`
+   ([ADR-0037](vpay:docs/adr/0037-authentication-methods-are-deployment-configuration.md)).
+   The official `stripe` package can still reach vpay:
+   `@vaam-apps/vpay-sdk/stripe` supplies a `config.httpClient` that seals each
+   request and opens each answer. See [Signed requests](/api/signed-requests),
+   [Authentication](/api/authentication) and
+   [Stripe compatibility](/api/stripe-compat).
 2. **Idempotency is required.** Every `POST` must carry an `Idempotency-Key`.
    Stripe makes the key optional.
 3. **A retry is a new PaymentIntent.** An intent can have only one charge, ever
@@ -134,14 +139,15 @@ carry over. The comparison breaks in three places:
 vpay ships as **one binary**, `vpay-server`, with several modes. With no
 subcommand it serves the API. `vpay-server worker` runs the job loop. The job
 loop polls rails, settles charges, delivers webhooks and escalates stuck
-payments. `vpay-server staff add` creates a dashboard account. Both of the
+payments. `vpay-server staff add` creates a dashboard account, and
+`staff pair-key` and `staff revoke-key` attach and end a console key. Both of the
 long-running modes share one Postgres database.
 
 ```mermaid
 flowchart LR
-    M["Merchant backend<br/>(SDK or stripe-node)"] -->|"/v1 (bearer token)"| S
+    M["Merchant backend<br/>(SDK or stripe-node)"] -->|"/v1 (signed messages)"| S
     B["Payer's browser<br/>(checkout page, stripe-js)"] -->|"/v1/browser (pk + client_secret)"| S
-    ST["Staff (dashboard app)"] -->|"/dash/v1"| S
+    ST["Staff"] -->|"/dash/v1 (console key or staff session)"| S
     RL["Rail"] -.->|"POST /provider/{code}/callback<br/>never called by any rail"| S
     S["vpay-server (serve)"] --> DB[("Postgres")]
     WK["vpay-server worker"] --> DB
@@ -150,12 +156,13 @@ flowchart LR
     WK -->|"signed webhooks"| M
 ```
 
-| Surface                          | Who calls it                                                            | Today                                                                                                                                                                                                                                                                          |
-| -------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/v1`                            | A merchant's server, with a bearer token from `POST /v1/oauth/token`    | Payment intents, checkout sessions, customers, invoices, events, refunds, account holders                                                                                                                                                                                      |
-| `/v1/browser`                    | A payer's page, with a publishable key and the intent's `client_secret` | Built, and walked by a real browser against stub rails                                                                                                                                                                                                                         |
-| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                       | Proven against WireMock. **No rail has ever called it**. Since v0.12.0 it checks Notch Pay's signature, where its Hash Key is configured, before a callback may pull a poll forward; since v0.13.0 it reads the event name under `event`, as Notch Pay's real webhooks send it |
-| `/dash/v1`                       | The dashboard app's server, under a staff session                       | Staff sign-in and read routes. None of the dashboard writes ADR-0008 describes is built                                                                                                                                                                                        |
+| Surface                          | Who calls it                                                                                 | Today                                                                                                                                                                                                                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/v1`                            | A merchant's server, signing every call; a bearer token too where `auth.methods` permits it  | Payment intents, checkout sessions, customers, invoices, events, refunds, account holders                                                                                                                                                                                      |
+| `/v1/browser`                    | A payer's page, with a publishable key and the intent's `client_secret`                      | Built, and walked by a real browser against stub rails                                                                                                                                                                                                                         |
+| `POST /provider/{code}/callback` | A rail (callbacks are hints only)                                                            | Proven against WireMock. **No rail has ever called it**. Since v0.12.0 it checks Notch Pay's signature, where its Hash Key is configured, before a callback may pull a poll forward; since v0.13.0 it reads the event name under `event`, as Notch Pay's real webhooks send it |
+| `/dash/v1`                       | A client signing with a paired console key, or a staff session where `human_login` is served | Read routes, and staff sign-in where served. None of the dashboard writes ADR-0008 describes is built, and the dashboard app reads none of the read routes yet                                                                                                                 |
+| `/mcp/v1`                        | A merchant's AI agent, with a bearer token for the MCP endpoint                              | Opt-in, a first slice: nine tools. See [MCP for agents](/api/mcp)                                                                                                                                                                                                              |
 
 `GET /v1/balance` is not routed anywhere, and it answers an honest `404`. A
 refund can be created, but a `201` does not mean money came back. Nothing in
@@ -165,12 +172,14 @@ vpay <Release /> settles a `pending` refund, and no rail has ever refunded anyth
 
 - **`frontends/apps/checkout`** is the payment page vpay serves, in hosted and
   embedded (iframe) modes. See [Hosted checkout](/checkout/hosted).
-- **`frontends/apps/dashboard`** is where staff sign in and read one merchant's
-  payments. It observes and does not administer
+- **`frontends/apps/dashboard`** is where staff sign in. In <Release /> it shows
+  an account page and no payments: the pages that read one merchant's records
+  were deleted and are not rebuilt. It observes and does not administer
   ([ADR-0008](vpay:docs/adr/0008-dashboard-scope.md)). See
   [Dashboard](/dashboard/).
 - **Merchant SDKs.** `sdks/rust` (`vpay-sdk`) and `sdks/nodejs`
-  (`@vaam-apps/vpay-sdk`) are held to one capability matrix. `sdks/stripe-js`
+  (`@vaam-apps/vpay-sdk`) are held to one capability matrix, and seal every
+  call through one implementation. `sdks/stripe-js`
   (`@vaam-apps/vpay-stripe-js`) is the browser client for a payer's page.
   `sdks/stripe-compat` drives the official `stripe` package against a live
   stack. Most of `sdks/nodejs`'s own tests answer themselves through a
@@ -260,7 +269,8 @@ See [What works today](/guide/status) for the full picture, and
 - [Payment lifecycle flow](vpay:docs/flows/payment-lifecycle.md): the two flow
   shapes and every state
 - [ADR-0002](vpay:docs/adr/0002-provider-port.md) and
-  [ADR-0010](vpay:docs/adr/0010-merchant-auth-private-key-jwt.md): the port and
-  merchant authentication
+  [ADR-0035](vpay:docs/adr/0035-v1-is-a-signed-message-not-a-token.md): the port
+  and merchant authentication (which superseded
+  [ADR-0010](vpay:docs/adr/0010-merchant-auth-private-key-jwt.md) for `/v1`)
 - Agents orienting in this repository should load the [vpay](skill:vpay) skill
   first. It routes to the rest.

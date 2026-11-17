@@ -37,7 +37,7 @@ decision is recorded in [ADR-0011](vpay:docs/adr/0011-error-modelling.md).
 
 ## The envelope a merchant receives
 
-Every `/v1` error has Stripe's shape:
+Every `/v1` error a handler raises has Stripe's shape:
 
 ```json
 { "error": { "type": "…", "code": "…", "message": "…", "param": "…" } }
@@ -48,6 +48,16 @@ Every `/v1` error has Stripe's shape:
 the error's public message. The full error chain goes to the log — only the
 public message reaches the merchant. Handlers cannot build an envelope by hand:
 the renderers are private to `vpay-api` and called from one place.
+
+Since <Release /> the envelope travels sealed: a signed request gets its error
+as a signed answer, with the same JSON inside. One refusal is **not** the
+envelope at all: a request the signed transport refuses (unsigned, an unknown or
+disabled key, a bad signature, a replay) gets one coarse, unsigned `401`, the
+same bytes whatever the cause, so that the answer is no oracle for the cause
+([Signed requests](/api/signed-requests#what-a-refusal-looks-like)). The
+`Authentication` row below is what a **bearer-token** caller still receives
+(`missing_bearer_token`, `invalid_token`), on a deployment whose `auth.methods`
+permits tokens.
 
 Three properties keep the envelope from leaking: another merchant's object and a
 missing object produce **byte-identical** `404`s (the API is not an id oracle);
@@ -169,7 +179,7 @@ prevent.
 | Part                                     | Status                 | Evidence                                                                                                                                                                                                                                                    |
 | ---------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Category`, `Classify`, the policy table | <Status s="built" />   | Invariant tests over every category, plus a literal transcription of the table                                                                                                                                                                              |
-| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `401`, `403`, `404`, `409`, `502`, `503` through it                                                                                                                                                                        |
+| `ApiError` envelope on `/v1`             | <Status s="built" />   | Real request paths answer `400`, `403`, `404`, `409`, `502`, `503` through it, sealed for a signed caller; `401` through it only for a bearer-token caller, since the signed transport's own refusal is not the envelope                                    |
 | `JobError::decision` in the worker       | <Status s="built" />   | Consumed by `vpay_worker::run_loop`                                                                                                                                                                                                                         |
 | Exit codes from the category             | <Status s="built" />   | Every mode of `vpay-server` exits with `Category::exit_code()`                                                                                                                                                                                              |
 | `verify-errors` gate                     | <Status s="built" />   | In `just verify` and CI                                                                                                                                                                                                                                     |

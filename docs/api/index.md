@@ -17,6 +17,7 @@ sources:
   - docs/status/verification/2026-10-23-method-type-routing.md
   - docs/sdks/parity.md
   - docs/status/verification/2026-10-24-rail-on-v1.md
+  - examples/merchant-curl/README.md
 skills:
   - vpay-merchant-api
   - vpay-payments
@@ -27,9 +28,12 @@ skills:
 `/v1` is the API a merchant's own backend calls. Its object model, form
 encoding, error envelope and idempotency semantics are Stripe's, so an existing
 Stripe integration reads naturally against it. Its **authentication is not**
-Stripe's: there is no API key, only a short-lived bearer token obtained with
-OAuth2 `client_credentials` + `private_key_jwt` (see
-[Authentication](/api/authentication)).
+Stripe's: there is no API key. Since <Release /> every call is a **signed
+message** under an Ed25519 key the merchant registered, and every answer is one
+signed by vpay ([Signed requests](/api/signed-requests)). Where a deployment's
+`auth.methods` permits it, a bearer token from OAuth2 `client_credentials` +
+`private_key_jwt` is accepted beside the signature
+([Authentication](/api/authentication)).
 
 Every route below is real — it answers with real rows from a real Postgres — but
 the rails behind the money-moving ones have only ever been WireMock stubs, apart
@@ -40,33 +44,40 @@ test-mode payments through Notch Pay's **sandbox** on 2026-10-21 and -22. Read
 Agents working on this surface should load
 [vpay-merchant-api](skill:vpay-merchant-api).
 
-## Four surfaces, four credential models
+## The surfaces and their credential models
 
-vpay exposes three authenticated HTTP surfaces and one public callback path.
+vpay exposes three authenticated HTTP surfaces (five where a deployment turns on
+the console's pairing route and the MCP endpoint) and one public callback path.
 They are kept apart on purpose — the API reference calls conflating any of them
 a security bug.
 
-| Surface                     | Caller                   | Credential                                                               | Page                                        |
-| --------------------------- | ------------------------ | ------------------------------------------------------------------------ | ------------------------------------------- |
-| `/v1`                       | the merchant's backend   | bearer token from `private_key_jwt`                                      | this section                                |
-| `/v1/browser`               | the payer's browser      | publishable key + the intent's (or session's) `client_secret`            | [Browser checkout](/checkout/browser)       |
-| `/dash/v1`                  | a signed-in staff member | OIDC session (authorization code + PKCE)                                 | [Dashboard auth](/dashboard/authentication) |
-| `/provider/{code}/callback` | a rail                   | none — a callback only pulls a status query forward, never changes state | [Reconciler](/payments/reconciler)          |
+| Surface                     | Caller                      | Credential                                                                                       | Page                                                      |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `/v1`                       | the merchant's backend      | a signed message; a bearer token too where `auth.methods` permits it                             | [Signed requests](/api/signed-requests)                   |
+| `/v1/browser`               | the payer's browser         | publishable key + the intent's (or session's) `client_secret`                                    | [Browser checkout](/checkout/browser)                     |
+| `/dash/v1`                  | a staff member              | a signed message under a paired console key; a staff session token where `human_login` is served | [Dashboard auth](/dashboard/authentication)               |
+| `/svc/v1`                   | a registered service (vaam) | a signed message under a `service_clients` key with a capability                                 | [Dashboard auth](/dashboard/authentication#pairing-a-key) |
+| `/mcp/v1`                   | a merchant's AI agent       | a bearer token whose audience is the MCP endpoint; opt-in                                        | [MCP for agents](/api/mcp)                                |
+| `/provider/{code}/callback` | a rail                      | none — a callback only pulls a status query forward, never changes state                         | [Reconciler](/payments/reconciler)                        |
 
 `/v1/browser` is **not** a second way into `/v1`: it has its own route table,
 its own 404 fallback and CORS, and exactly one route that is not a `GET`.
-`/dash/v1` is mounted only on a deployment configured for the staff surface, and
-no deployment running it is on record. The provider callback route is
+`/dash/v1` is mounted only on a deployment that configures a console or a staff
+sign-in, `/svc/v1` only with a `dashboard:` block, and `/mcp/v1` only when
+`deployment.surfaces` names `mcp`; no deployment running any of them is on
+record. The provider callback route is
 proven against WireMock and has never been called by MTN, Orange or Notch Pay.
 
 ![vpay system overview: merchant, vpay-server serve and worker, Postgres, rails, checkout, dashboard and webhooks](/images/architecture.svg){.diagram}
 
 ## What is served on `/v1`
 
-Unauthenticated, by necessity: `GET /healthz` and the merchant OAuth provider —
+Outside the signature, by necessity: `GET /healthz`,
+`GET /.well-known/vpay-auth` (which methods this deployment serves) and, where
+`machine_tokens` is permitted, the merchant OAuth provider —
 `POST /v1/oauth/token`, `GET /v1/oauth/.well-known/openid-configuration` and
-`GET /v1/oauth/jwks.json`. Everything else sits behind a merchant bearer token
-and a scope check:
+`GET /v1/oauth/jwks.json`. Everything else sits behind a signature (or a bearer
+token, where permitted) and a scope check:
 
 | Resource                               | Methods                                                            |
 | -------------------------------------- | ------------------------------------------------------------------ |
@@ -88,8 +99,10 @@ and a scope check:
 | `/v1/account_holders`                  | `GET`                                                              |
 
 The table is the constant `vpay_api::V1_ROUTES`, and a boundary test walks that
-constant rather than a list of its own, asserting every entry answers `401`
-without a token — so a route cannot be mounted without being covered.
+constant rather than a list of its own, asserting every entry answers the coarse
+`401` to an unsigned request — so a route cannot be mounted without being
+covered. The same 37 operations are the contract table in `vpay-wire` that a
+signature binds, and the rows of the [MCP parity table](/api/mcp#the-nine-tools).
 
 `POST` and `PATCH` are one handler on `/v1/invoices/{id}` and
 `/v1/invoice_items/{id}`. Stripe's API has no `PATCH`, so an existing client
@@ -121,7 +134,7 @@ sessions filter and not by the other two. A server older than 0.6.0 ignores
 
 ```mermaid
 flowchart LR
-  OP["OAuth provider<br/>/v1/oauth/*<br/>(no token)"]
+  OP["A signed request<br/>(or a bearer token,<br/>where permitted)"]
   subgraph Payments
     PI["/v1/payment_intents"]
     CS["/v1/checkout/sessions"]
@@ -137,9 +150,9 @@ flowchart LR
     AH["/v1/account_holders"]
   end
   BAL["GET /v1/balance"]
-  OP -- "bearer token + scope" --> Payments
-  OP -- "bearer token + scope" --> Billing
-  OP -- "bearer token + scope" --> Reads
+  OP -- "verified + scope" --> Payments
+  OP -- "verified + scope" --> Billing
+  OP -- "verified + scope" --> Reads
   CS -. "references one" .-> PI
   RF -. "against one" .-> PI
   IN -. "bills one" .-> CU
@@ -153,10 +166,10 @@ flowchart LR
 ### Scopes
 
 Two scopes exist: `payments:write` for any method that is not a read, and either
-`payments:read` or `payments:write` for `GET`/`HEAD`. A valid token with neither
-is a `403 forbidden`, not a `401` — the credential is fine, it just authorises
-nothing. An authenticated request to a path with no route is
-`404 unknown_route`.
+`payments:read` or `payments:write` for `GET`/`HEAD`. A signed call's scopes are
+its registration's. A valid credential with neither scope is a `403 forbidden`,
+not a `401` — the credential is fine, it just authorises nothing. A verified
+request to a path with no route is `404 unknown_route`.
 
 ## Bodies and errors
 
@@ -168,7 +181,8 @@ over **64 KiB** is refused. Since v0.12.0 a confirm's `payment_method_options` m
 map: a plain string there is refused, where it used to be accepted. Amounts are integer minor units — see
 [Money](/payments/money).
 
-Every non-2xx response the API renders is Stripe's envelope:
+Every non-2xx response the API renders is Stripe's envelope, sealed like any
+other answer when the request was signed:
 
 ```json
 {
@@ -185,8 +199,10 @@ The status, `type` and `code` are derived from one classification of the failing
 error, never chosen per handler, so the same failure always gets the same
 answer. `message` never carries hosts, table names or credentials. Two responses
 are produced above that renderer and carry an empty or plain-text body instead:
-a `405` (right path, wrong method) and a `413` (body too large). The full
-category table is on [Errors](/payments/errors).
+a `405` (right path, wrong method) and a `413` (body too large). And a refusal
+by the signed transport is **not** the envelope at all: it is one coarse,
+unsigned `401` whatever the cause ([Signed requests](/api/signed-requests#what-a-refusal-looks-like)).
+The full category table is on [Errors](/payments/errors).
 
 ## Payment-method types and routing
 
@@ -360,15 +376,16 @@ hold the `re_…`.
 
 ## `GET /v1/balance` is not routed
 
-It answers the honest `404` from the nest's fallback, to an authenticated
-caller, because there is no ledger read path — a `200` would mean somebody
+It answers the honest `404` from the nest's fallback, to a verified caller, because there is no ledger read path — a `200` would mean somebody
 invented a resource. Both SDKs can call it and get that `404`.
 
 ## Status in this release
 
 | Part                                        | Status                   | Evidence                                                                                                                                  |
 | ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| OAuth provider and the `/v1` 401 boundary   | <Status s="built" />     | integration suites over a real router and Postgres, run in CI                                                                             |
+| Signed `/v1`, and the coarse `401`          | <Status s="built" />     | `signed_transport.rs` over a real router and Postgres; see [Signed requests](/api/signed-requests#status-in-this-release)                 |
+| A bearer token beside it (`auth.methods`)   | <Status s="partial" />   | router and fixture tests; the round trip against real tables is CI's                                                                      |
+| The merchant MCP endpoint                   | <Status s="partial" />   | a first slice: nine tools over a real Postgres and OP, opt-in, no pod; see [MCP for agents](/api/mcp)                                     |
 | Payment intents, checkout sessions          | <Status s="partial" />   | real routes and rows; over seven MTN sandbox payments succeeded and Notch Pay's sandbox took six; other rail evidence is stub-based       |
 | Payment-method types and routing            | <Status s="partial" />   | WireMock and a real Postgres; one provisional score component; no SDK support; the outcome is on `/v1` since v0.14.0, the decision is not |
 | Customers, invoices, events                 | <Status s="built" />     | container-backed integration suites through the shipping router                                                                           |
@@ -386,5 +403,6 @@ The full record is [docs/api/README.md](vpay:docs/api/README.md) and
 - [README — what is served on `/v1` today](vpay:README.md)
 - [The resource contract the SDKs implement](vpay:docs/flows/merchant-auth/resource-contract.md)
 - [RFC-0003: refunds and their destinations](vpay:docs/rfc/0003-refunds-destinations-and-the-first-ledger-postings.md)
-- [Raw HTTP walkthrough with curl](vpay:examples/merchant-curl/README.md)
+- [Raw HTTP walkthrough, over a sealing CLI](vpay:examples/merchant-curl/README.md)
+- [Signed requests](/api/signed-requests), [MCP for agents](/api/mcp)
 - Skill: [vpay-merchant-api](skill:vpay-merchant-api)

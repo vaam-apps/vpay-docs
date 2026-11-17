@@ -1,9 +1,9 @@
 ---
 title: The staff dashboard
 description:
-  What the merchant dashboard is, how its read path works from browser to
-  /dash/v1, what a screen is allowed to show, and how much of it exists in
-  this release.
+  What the merchant dashboard is, what /dash/v1 serves and to whom, what the
+  dashboard application does in this release (a sign-in and an account page,
+  no data pages), and what has to happen before it shows a payment again.
 status: partial
 sources:
   - docs/flows/dashboard.md
@@ -13,9 +13,11 @@ sources:
   - docs/flows/dashboard/status-styling-and-demo.md
   - docs/adr/0008-dashboard-scope.md
   - docs/adr/0022-surface-isolation-and-independent-scaling.md
+  - docs/status/frontend.md
   - docs/status/verification/2026-10-21-dashboard-md3e.md
   - docs/status/verification/2026-10-21-dashboard-hydration.md
   - docs/status/verification/2026-10-26-dashboard-cratestack-refine.md
+  - docs/status/verification/2026-10-30-vpa5c-dashboard-e2e.md
   - frontends/apps/dashboard
   - docs/flows/webhooks.md
 skills:
@@ -25,290 +27,186 @@ skills:
 
 # The staff dashboard
 
-The dashboard is a Next.js app a merchant's staff sign in to, to see what
-happened to that merchant's payments. Its founding decision is that it
-**observes and does not administer**: it reads records, it never changes
-configuration, and it never holds a merchant API key. In <Release /> it is
-**read-only** — a staff member can sign in, land on an Overview of counts, and
-read payments, refunds, webhook deliveries, customers and checkout sessions, and
-cannot do anything at all to any of them. No deployment of it is on record: vpay
-is being tested for live use on some clusters (the owner's statement,
-2026-10-21), but no dashboard pod and no result from that testing is recorded.
+The dashboard is where a merchant's staff are meant to see what happened to
+that merchant's payments. Its founding decision is that it **observes and does
+not administer**: it reads records, never changes configuration, and never
+holds a merchant credential
+([ADR-0008](vpay:docs/adr/0008-dashboard-scope.md), which stands; the OIDC
+session it assumed is superseded).
 
-Agents working on this should load [vpay-dashboard](skill:vpay-dashboard).
+It has two halves, and in <Release /> they are in very different states:
+
+- **`/dash/v1`, the backend surface**, serves this merchant's payments,
+  refunds, webhook deliveries, customers and checkout sessions, read-only, to a
+  request signed by a paired console key or, where the deployment serves staff
+  sign-in, carrying a staff access token
+  ([authentication](/dashboard/authentication)).
+- **The dashboard application** (`frontends/apps/dashboard`, Next.js) **reads
+  none of it.** In this release it signs a staff member in with a password and
+  an authenticator code, or with single sign-on, and lands them on an account
+  page that says who is signed in, which merchant they read, and offers Sign
+  out. The Overview, the payments list and detail, and the refunds, deliveries,
+  customers and checkouts lists that v0.15.0 shipped were **deleted** when the
+  console moved to signed requests (VP-6a). They are not built in this
+  release; vpay's plans bring them back with VP-6b.
+
+No deployment of either is on record. Agents working on this should load
+[vpay-dashboard](skill:vpay-dashboard).
 
 ## The boundary
 
 > A `/dash/v1` request reads exactly one tenant's rows: the one
-> `dashboard_client.merchant_id` names, fixed in YAML and checked at boot.
+> `dashboard.merchant_id` names, fixed in YAML and checked at boot — unless the
+> key or session behind it belongs to an administrator, who may name another
+> registered merchant.
 
-The tenant does **not** come from the caller's credential, the way `/v1`
-resolves one. No claim in any token can change it. A deployment whose staff must
-see two merchants registers two dashboard clients.
+The tenant does **not** come from anything the request says. For a
+non-administrator the `?merchant_id=` parameter is not even parsed. A deployment
+whose staff must see two merchants needs two deployments; the field does not
+become a list. A `dashboard.merchant_id` no merchant registers is a boot
+refusal, because the alternative is an empty table that looks exactly like a
+merchant with no payments. A deployment with neither `dashboard:` nor the
+`human_login` blocks mounts no `/dash/v1` at all.
 
-Four checks stand between a request and a row, each in a different place so no
-single edit removes the boundary:
+Between a request and a row:
 
-1. The token validates — signature, expiry, issuer, and an audience equal to the
-   registered `dashboard_client.client_id` — against vpay's own JWKS.
-2. It carries a `vpay_merchant_id` claim equal to the bound merchant. Only the
-   staff sign-in grant stamps that claim, so **no `client_credentials` token can
-   ever read `/dash/v1`**. The claim is compared, never used: a forged one buys
-   a `403`, never another merchant's rows.
-3. It carries the registration's single scope.
-4. Every query filters by the bound `merchant_id`.
+1. **The credential.** A signature from a live console key, or, where
+   `human_login` is served, a token whose audience is the dashboard client,
+   whose `vpay_merchant_id` claim is the dashboard's tenant and which carries
+   its single scope. No `client_credentials` token can carry that claim.
+2. **The member.** Re-read on every request: active, and this merchant's.
+3. **The tenancy.** One function resolves it for both doors.
+4. **The query.** Every query filters by that merchant.
 
-Any method other than `GET`/`HEAD` is refused by the boundary **before** the
-router matches, with a `403`. That is what makes "read-only" structural rather
-than a promise: a write mounted later cannot arrive unlogged. Two boot checks
-back this up — a `dashboard_client.merchant_id` no merchant registers is fatal,
-and so is a merchant registration listing the dashboard's client id in its
-`allowed_audiences`. A deployment with no `dashboard_client` mounts no
-`/dash/v1` at all.
+**Read-only is structural.** A write method on a read route is refused before
+the router (`405` with `Allow: GET` from the signed layer), so a write mounted
+later cannot arrive unlogged. ADR-0008's per-record writes, each with an
+`audit_log` row, are designed and **not built**; so there is no `audit_log`.
 
-How a staff member gets that token is
-[Dashboard authentication](/dashboard/authentication).
+## What `/dash/v1` serves
 
-## From browser to `/dash/v1`
+| Route                               | Answers                                                                                                                                                     |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /dash/v1/payment_intents`      | The bound merchant's intents, newest first, cursor-paged; `?status=`, `?created_gte=`, `?created_lte=`. `?customer=` is a `400` naming `customer`           |
+| `GET /dash/v1/payment_intents/{id}` | One intent, with its charge, its refunds and its event timeline, as `object: "dashboard.payment_detail"`                                                    |
+| `POST /dash/v1/$procs/…`            | Five CrateStack search procedures: payment intents, refunds, webhook deliveries, customers and checkout sessions, offset-paged with vpay's own `totalCount` |
 
-The browser never holds a vpay token. It holds an httpOnly session cookie on the
-dashboard's own origin; the dashboard's **server** looks up the `/dash/v1`
-access token in the `staff_sessions` row on every render and makes the call.
-
-```mermaid
-flowchart LR
-    B["Staff browser<br/>httpOnly session cookie"] --> P["Dashboard pages<br/>Server Components, requireStaff()"]
-    B -.->|"GET only, same-origin"| F["BFF route handlers<br/>/api/dash/*"]
-    P --> T["/dash/v1 access token<br/>read from staff_sessions row"]
-    F --> T
-    T --> R["GET /dash/v1/payment_intents<br/>GET /dash/v1/payment_intents/{id}"]
-    T --> Q["POST /dash/v1/$procs/search...<br/>the Overview, refunds, deliveries, customers, checkouts"]
-    R --> DB[("Postgres<br/>bound merchant only")]
-    Q --> DB
-    X["Merchant API key"] -.->|"never held here"| P
-    W["Writes and audit_log"] -.->|"not built, refused with 403"| R
-```
-
-- **Pages read on the server.** Each page is a Server Component that calls
-  `requireStaff()` and reads `/dash/v1` itself. The payments list, the payment
-  detail and, since <Release />, the other four lists then hand what they read
-  to Refine's hooks as initial data; the Overview renders its counts directly
-  and uses no client data layer. A browser-side read was tried and withdrawn
-  after it broke the end-to-end suite.
-- **The BFF** (`/api/dash/*`) is a same-origin, `GET`-only proxy that
-  authenticates on the same cookie. A request with no cookie never reaches vpay;
-  a request the dashboard did not issue is refused by an `Origin` /
-  `Sec-Fetch-Site` check; the bearer token appears in no response header or
-  body; no caller-supplied merchant id, audience or scope is forwarded. Every
-  other method gets a `405`. It has six handlers — one per list plus the
-  payment detail — and Refine's two data providers are wired to it, but vpay records
-  that no page issues a read through it: every read is made on the server, and
-  Refine is configured to treat a server-seeded query as the answer and not read
-  it again. A twelve-step click-through, run against a fake of `/dash/v1` kept
-  outside the vpay repository, made no BFF request. It was attacked in a
-  security review and driven from a real browser.
-- **The payments list** is served by two REST routes and is cursor-paged, like
-  the merchant API. **The other four lists** are CrateStack procedures under
-  `/dash/v1/$procs/`, which the dashboard's server calls with `POST` on the
-  browser's behalf; they are offset-paged, twenty to a page. Since <Release />
-  the server makes those calls through `@vpay/dash-client`, a TypeScript client
-  generated from `schemas/vpay.cstack`, with `@cratestack/refine` as their
-  Refine data provider. `just check-schema` fails if the committed client is
-  stale, and a filter key a procedure does not declare is refused before
-  anything is sent. The payments list stays on its hand-written provider,
-  because it is cursor-paged. Refunds,
-  deliveries and checkouts pass one filter through to their procedure (a status,
-  or a state for deliveries); customers take none. **The Overview** reads those
-  four procedures and `searchPaymentIntents` for its counts.
+The procedure transport has an allowlist of those five searches: CrateStack's
+generated router mounts every procedure in the schema, so the merchant write
+procedures that serve [MCP](/api/mcp) are a `404` here, ahead of the signed
+transport. The generated TypeScript client, `@vpay/dash-client`, still lists
+all of them; the application may import it for its types only.
 
 The dashboard is not an SDK surface: the merchant SDKs speak `/v1`, and a
 `/dash/v1` method in one would be a merchant credential reaching for a staff
-surface. The detail response is vpay's own shape
-(`object: "dashboard.payment_detail"`), not a pretend Stripe object.
+surface.
 
-## The screens
+## The application today
 
-| Page                                       | What it shows                                                                                                                               |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                        | Nothing of its own: it sends a signed-in browser to `/overview` and any other to `/login`                                                   |
-| `/login`, `/login/totp`, `/login/password` | The sign-in — see [authentication](/dashboard/authentication). With single sign-on configured, `/login` also offers "Sign in with Keycloak" |
-| `/overview`                                | The home screen: twelve counts, each a link to the rows it counts, and the six newest payments. See below                                   |
-| `/payments`                                | The bound merchant's intents, newest first; status chips, a created-range picker, cursor paging                                             |
-| `/payments/{id}`                           | The intent, its charge, its refunds, the last error with its failure code, the event timeline                                               |
-| `/refunds`, `/deliveries`, `/checkouts`    | Read-only lists, newest first, twenty to a page; chips filter by status (by state, for deliveries). Refunds and checkouts link to payments  |
-| `/customers`                               | A read-only list of saved customers, newest first, twenty to a page; no filter                                                              |
+| Route             | What it asks or shows                                                                                                                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`          | Asks vpay which methods it serves, then: an outage notice; "This console signs in with a paired key"; the variables to set; or the work email, then the password, with a single sign-on button where it is configured |
+| `/login/totp`     | The six-digit code; a first sign-in also shows the QR code, with the typed key in a bottom sheet                                                                                                                      |
+| `/login/password` | While the one-time password is in force: the current, the new, the new again                                                                                                                                          |
+| `/`               | The account page: who is signed in, which merchant, Sign out. If vpay will not mint this person a token, it says so here with the request id                                                                          |
+| `/signed-out`     | Forgets a dead session cookie, then `/login`                                                                                                                                                                          |
+| `/healthz`        | "Next is answering"; probes nothing                                                                                                                                                                                   |
 
-The navigation is generated from one array and a test fails if it ever links to
-a page that does not exist — a menu entry for an unwritten page is the same lie
-as an empty table. The Overview is the rail's top item, and the other five
-screens sit in three sections: Money, Customers and Integrations.
+One screen asks one question, Continue stays disabled until the answer is valid,
+and every choice is a bottom sheet: a test fails on any dropdown, and another on
+any shadow. Every call to vpay has a five-second deadline, and a timeout is
+shown as an outage, never as "paired key". How the sign-in itself works is
+[Dashboard authentication](/dashboard/authentication).
 
-### The Overview
+**Configuration** is read once at start: `VPAY_DASH_API` (vpay's URL as this
+server reaches it), the three client values `VPAY_DASHBOARD_CLIENT_ID`,
+`VPAY_DASHBOARD_REDIRECT_URI` and `VPAY_DASHBOARD_SCOPE` (needed only where vpay
+serves `human_login`; missing, `/login` names them and offers no form), and
+optionally `VPAY_DASHBOARD_PUBLIC_ORIGIN` and `VPAY_DASHBOARD_SSO_ISSUER`.
 
-`/overview` is where a staff member lands after signing in. It answers "is
-anything wrong for this merchant right now?" with counts, and **every count is
-one vpay computed**: the `totalCount` of a search procedure called with
-`limit: 1` and the filter the tile links to. Twelve reads are made in parallel
-on the server:
+**Deleted and staying deleted:** the BFF (`/api/dash/*`), `middleware.ts`, the
+Refine data and auth providers and the client-side reads. The components that
+drew the old screens (the payments table, filters, pager and detail, the
+procedure list view) survive with their tests and Storybook stories, and are
+rendered by no route.
 
-- All payments, and the payments in each of the five statuses. "All payments" is
-  its own unfiltered read, not the sum of the five, which could disagree with it
-  while payments are being written.
-- Failed refunds, pending refunds, failed webhook deliveries, deliveries whose
-  retries are exhausted, open checkout sessions, and customers.
+### The rules VP-6b's pages inherit
 
-The six newest payments come from the "All payments" read. Each tile is a link to
-the list filtered by the value it counted, so the screen never shows a number an
-operator cannot open. The heading states the UTC instant the counts were read.
+The deleted screens were held to rules about **absence**, recorded in vpay's
+[slice-1 gaps](vpay:docs/flows/dashboard/slice-1-gaps.md), and VP-6b's list of
+end-to-end cases to restore includes them:
 
-It keeps the rules about absence. Nothing on it is summed, averaged or
-estimated, and there is no money total anywhere, because vpay serves no
-aggregate. A read vpay refuses is drawn as a dash, with the refusal shown once
-above the tiles — never as a `0`. A failed-refund, failed-delivery or
-exhausted-delivery count is painted in the danger tone when it is above zero.
-
-What backs it is narrower than the sign-in does. Three vitest cases run the
-Overview's reads against a stubbed `fetch`: each tile asks for the filter it
-links to, each count is vpay's `totalCount` and never a sum, and a refused count
-stays refused. A headless browser has also run it, against a fake of the
-`/dash/v1` contract kept outside the vpay repository. **No Cypress case reads an
-Overview count**; the spec asserts only that sign-in ends on `/overview`. See
-[the redesign's verification page](vpay:docs/status/verification/2026-10-21-dashboard-md3e.md).
-
-### Moving between screens, and the theme
-
-The signed-in layout renders the shell once and keeps it mounted: the rail, a
-top app bar with the merchant, and an account block with who is signed in and
-Sign out. The layout runs the same `requireStaff()` gate as every page, shared
-with the page it wraps, so a full render costs one session read. Every page
-still runs the gate itself on every navigation; Refine's own `check` makes no
-request.
-
-The rail's links are plain anchors from the UI package, which would load a whole
-new document for every click. The shell turns an ordinary same-tab click into a
-client-side navigation (`src/client-navigation.ts`), and leaves a modified,
-middle-button, `target` or `download` click to the browser. Each route has a
-`loading.tsx` skeleton, shown in the page area as soon as a link is followed.
-One fixed click-through (a payment, back, each of the five lists, the next page)
-loaded six full documents before the change and one, the first, after it; each
-navigation read the staff session twice before and once after. That was
-measured in headless Chromium against the same fake of `/dash/v1`, not against a
-real vpay.
-
-The theme has two controls: a one-tap light and dark button in the top app bar
-(and on the signed-out card), and System, Light and Dark in the account block.
-The choice is kept in the browser. A script that runs first in `<body>` applies
-it before the first paint; the document is dark until then.
-
-### What a screen may show
-
-A dashboard that looks complete is the failure mode this project fears most, so
-the screens are held to rules about **absence**:
-
-- **No "Rail" column on the list.** The list response carries no charge, only
-  `payment_method_types` — the rails an intent _may_ use. So the column is
-  headed **Methods**. The detail page has a real rail, from the charge.
-- **The payer's phone is always a dash.** `charges.payer_ref_masked` is never
-  written, so the detail page renders a real `null` as `—` and must never fall
-  back to the unmasked value. There is no payer column on the list and no search
-  by phone, because both would be sourced from a column that is always empty.
-  The customers list is a different record: it shows each saved customer's name,
-  email and phone in full, and no address.
-- **No page count on the payments list.** Its route returns cursors and
-  `has_more`, never a total, so "page 3 of 12" would be invented. "Next" appears
-  only when `has_more` says so. The four procedure lists do show a total ("1–20
-  of 143 so far"), because their procedures return vpay's own `totalCount`.
-- **An unknown status renders as text**, not as a coloured pill. A green badge
-  on an unfamiliar status is a claim.
-- **The timeline names what it cannot show.** Under it, a banner says the
-  timeline is not the whole history of a payment and names the two event types
-  nothing writes, `payment_intent.created` and `payment_intent.processing` — see
-  [Webhooks](/api/webhooks). Until vpay 0.6.0 it named five, three of which had
-  gained writers; its test now also refuses the three that have one. One gap is
-  read from the code and not yet tested: a refund's events are stored against
-  the refund's own `re_…` id, and the timeline asks only for the intent's and
-  the charge's, so a real refund's events may not reach it.
-- **The merchant is on every signed-in page**, in the top app bar, and the
-  account block names who is signed in, so an empty list is distinguishable from
-  looking at the wrong merchant. The page that says vpay could not be reached has
-  no session to read them from, and shows neither.
-- **A refused read is never an empty list.** On the procedure lists an unknown
-  filter value is a `400` naming the field, and it is drawn as a refusal with its
-  request id, not as a table that reads "none in this state".
-- **Payer credentials never appear.** The checkout list's source type does not
-  even carry `client_secret_suffix` or `return_token`.
-- **`?customer=` is refused.** It is `/v1`'s
-  [customer filter](/api/#filtering-a-list-by-customer), and on
-  `GET /dash/v1/payment_intents` it is a `400` naming `customer`. Until vpay
-  0.6.0 it was silently ignored there, answering every customer's intents.
-- **Configuration fails closed.** The API URL, client id, redirect URI and scope
-  are read at container start; if one is missing, `/login` names the variables
-  and offers no form.
+- the payer's masked phone is always a dash, because nothing writes
+  `charges.payer_ref_masked`, and never falls back to the unmasked value;
+- the payments list shows no page count, because its route returns cursors and
+  `has_more`, never a total;
+- an unknown status renders as text, not as a coloured pill;
+- the event timeline names the two event types nothing writes,
+  `payment_intent.created` and `payment_intent.processing` (see
+  [Webhooks](/api/webhooks));
+- a refused read is never drawn as an empty list or as `0`.
 
 ## What it cannot do
 
-- **Anything to a payment.** ADR-0008 describes per-record writes — re-poll a
-  charge, replay a webhook, issue a refund, annotate a charge — each with an
-  `audit_log` row. **None is built**, so there is no `audit_log` either.
+- **Show any record.** No page reads `/dash/v1` (VP-6b). The demo stack's
+  sign-in therefore ends on the account page.
+- **Hold a console key.** The application cannot generate, pair or sign with
+  one until VP-6b, which also decides which credential wins when a browser holds
+  both a session and a key.
+- **Anything to a payment.** No write is built, so no `audit_log`.
 - **Balances and the ledger, settings, rail health** (slices 4–6) are not
-  started. Webhook deliveries are a list only; retries and signature replay are
-  not started.
-- **No deployment of it is on record.** The Helm chart templates a Deployment
-  for the app (`dashboard.enabled`, off by default) and a separate
-  `/dash/v1`-only backend tier (`management.enabled`). The image was run by hand
-  with a read-only root filesystem and answered its health path — but **no
-  Kubernetes pod running it is on record**, nor any other pod of the chart. On
-  2026-10-18 a real cluster refused to start the dashboard image because it
-  declared a named `USER node`; the image now declares the numeric
-  `USER 1000:1000`, and no pod of it has been seen starting since.
+  started; webhook retries and signature replay are not started.
+- **Run in a cluster, on record.** The Helm chart templates a Deployment for the
+  application (`dashboard.enabled`, off by default) and a separate
+  `/dash/v1`-only backend tier (`management.enabled`), but no Kubernetes pod of
+  either, or of any other part of the chart, is on record.
 
-::: warning Two deployment traps, already documented
-The management tier does **not** serve `POST /v1/oauth/token` (that mints the
-merchant credential); the staff grant is `/dash/v1/oauth/token`. And publishing
-`/dash/v1` through the chart's HTTPRoute with `networkPolicy.enabled` requires
-the Gateway's namespace in `networkPolicy.managementIngress.namespaceSelector` —
-a chart guard refuses the combination. Whether this tier should face a public
-gateway at all is an open maintainer decision. See
-[Deployment](/operate/deployment).
+::: warning Deployment traps, already documented
+The management tier does **not** serve `POST /v1/oauth/token`, which mints
+merchant credentials; the staff grant is `/dash/v1/oauth/token`, mounted only
+where `human_login` is served. Publishing `/dash/v1` through the chart's
+HTTPRoute with `networkPolicy.enabled` requires the Gateway's namespace in
+`networkPolicy.managementIngress.namespaceSelector`, and a chart guard refuses
+the combination. A proxy in front of the management pod must not add an
+`Authorization` header: a signed request that carries one is a `400`. Whether
+this tier should face a public gateway at all is an open maintainer decision.
+See [Deployment](/operate/deployment).
 :::
 
 ## Status in this release
 
-| Part                                                      | Status                   | Evidence                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/dash/v1` boundary, the two payment reads, boot refusals | <Status s="built" />     | `backends/tests/integration/tests/dashboard_read_surface.rs` over a booted server and real Postgres                                                                                                                                                                                                                                                                                                           |
-| Sign-in and the pages, in a real browser                  | <Status s="built" />     | `dashboard.cy.ts` signs in through the real OP against the compose stack, lands on `/overview` and reads payments                                                                                                                                                                                                                                                                                             |
-| Single sign-on routes                                     | <Status s="partial" />   | Built and covered by vitest against stubbed `fetch`; no browser has run them                                                                                                                                                                                                                                                                                                                                  |
-| Overview, and navigation without reloads                  | <Status s="partial" />   | Vitest against a stubbed `fetch`, and a headless browser against a fake of `/dash/v1`. Since <Release /> a Cypress case opens the Overview against the compose stack and asserts that no read was refused; none asserts a count's value                                                                                                                                                                       |
-| Refunds, deliveries, customers, checkouts lists           | <Status s="partial" />   | Read-only lists over CrateStack procedures, read through a generated client and `@cratestack/refine` since <Release />; status or state chips on three, none on customers. A Cypress case opens each against the compose stack, with WireMock rails, and asserts rows or the empty-state sentence and no refused read; the stack writes no refund and no customer, so those two showed only their empty state |
-| The BFF read surface                                      | <Status s="partial" />   | Six handlers, reviewed and browser-tested; pages render from server-side reads, not through it                                                                                                                                                                                                                                                                                                                |
-| Writes and `audit_log`                                    | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                                                                                                                                                                                                                                                                                                                              |
-| Slices 4–6                                                | <Status s="not-built" /> | Not started                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Real data on screen                                       | <Status s="partial" />   | Every payment it has shown settled against a WireMock rail                                                                                                                                                                                                                                                                                                                                                    |
-| Running in Kubernetes                                     | <Status s="not-built" /> | Chart templates exist; no pod is on record                                                                                                                                                                                                                                                                                                                                                                    |
+| Part                                                            | Status                   | Evidence                                                                                                                                                                          |
+| --------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/dash/v1` boundary, the two payment reads, the five searches   | <Status s="built" />     | `dashboard_read_surface.rs` and `dashboard_procedure_transport.rs` over a booted server and real Postgres, signed by console keys; `staff_sign_in.rs` reads it with a session too |
+| The application's password sign-in and account page             | <Status s="built" />     | `dashboard-human-login.cy.ts` in a real browser against the compose stack: 7 of 7 on CI's first `e2e (compose)` run                                                               |
+| The application's single sign-on                                | <Status s="partial" />   | Built, proven against a stubbed `fetch`; no browser has completed one                                                                                                             |
+| Pages that read `/dash/v1` (Overview, payments, the four lists) | <Status s="not-built" /> | Deleted in VP-6a; VP-6b restores them and ten of the nineteen deleted end-to-end cases                                                                                            |
+| A console key held by the application                           | <Status s="not-built" /> | VP-6b                                                                                                                                                                             |
+| Writes and `audit_log`                                          | <Status s="not-built" /> | Refused at the boundary; ADR-0008's writes are designed, unbuilt                                                                                                                  |
+| Slices 4–6                                                      | <Status s="not-built" /> | Not started                                                                                                                                                                       |
+| Running in Kubernetes                                           | <Status s="not-built" /> | Chart templates exist; no pod is on record                                                                                                                                        |
 
-The theme script has to run first in `<body>`. In v0.10.0's dashboard image it
-sat in `<head>`, where it failed React hydration in the document Cypress serves
-and took 17 of the spec's 18 cases down with it; v0.10.1 moved it, and a unit
-test pins the placement. With it moved, all 18 cases of `dashboard.cy.ts` passed
-in CI's compose job on the branch that carried the fix. No real user's browser
-was measured. See [the hydration record](vpay:docs/status/verification/2026-10-21-dashboard-hydration.md).
-
-The full record is [dashboard.md § Status](vpay:docs/flows/dashboard.md#status)
-and its three status pages. Overall standing is on [Status](/guide/status).
+vpay's own summary in [dashboard.md § Status](vpay:docs/flows/dashboard.md#status)
+still describes the pages v0.15.0 had; the authority for this release is
+[status/frontend.md](vpay:docs/status/frontend.md), which says what VPA-5a
+built and what VP-6b must restore. Overall standing is on
+[Status](/guide/status).
 
 ## Go deeper
 
-- [The dashboard flow](vpay:docs/flows/dashboard.md) — the invariant, the
+- [The dashboard flow](vpay:docs/flows/dashboard.md): the invariant, the
   slices, the boundary
-- [What slice 1 did not build](vpay:docs/flows/dashboard/slice-1-gaps.md) —
+- [What slice 1 did not build](vpay:docs/flows/dashboard/slice-1-gaps.md),
   including the rules about absence
-- [The read seam, the BFF, and its security review](vpay:docs/flows/dashboard/status-read-seam-and-bff.md)
-- [What is built and proven](vpay:docs/flows/dashboard/status-built-and-not-built.md)
+- [The frontend's status, and what VP-6b must restore](vpay:docs/status/frontend.md)
+- [The application's README](vpay:frontends/apps/dashboard/README.md)
+- [The sign-in, end to end](vpay:docs/status/verification/2026-10-30-vpa5c-dashboard-e2e.md)
 - [ADR-0008: the dashboard observes; it does not administer](vpay:docs/adr/0008-dashboard-scope.md)
 - [ADR-0022: surface isolation and independent scaling](vpay:docs/adr/0022-surface-isolation-and-independent-scaling.md)
-- [The app's README](vpay:frontends/apps/dashboard/README.md)
-- [The redesign and the reload fixes, measured](vpay:docs/status/verification/2026-10-21-dashboard-md3e.md)
-  · [The hydration failure and its fix](vpay:docs/status/verification/2026-10-21-dashboard-hydration.md)
+- The history of the deleted screens:
+  [the redesign](vpay:docs/status/verification/2026-10-21-dashboard-md3e.md),
+  [the hydration fix](vpay:docs/status/verification/2026-10-21-dashboard-hydration.md),
+  [the move to `@cratestack/refine`](vpay:docs/status/verification/2026-10-26-dashboard-cratestack-refine.md),
+  [the read seam and the BFF](vpay:docs/flows/dashboard/status-read-seam-and-bff.md)
 - Skills: [vpay-dashboard](skill:vpay-dashboard),
   [vpay-frontend](skill:vpay-frontend)
